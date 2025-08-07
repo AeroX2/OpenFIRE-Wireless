@@ -302,8 +302,8 @@ size_t SerialWireless_::writeBin(const uint8_t *data, size_t len) {
         return len;
     } else {
         _overflow_write = true;
-        // TODO: gestire overflow
-        // Serial.println("Overflow nello scrivere nel BUFFER scrittura");
+        // TODO: handle overflow
+        // Serial.println("Overflow in writing to the WRITE BUFFER");
         xSemaphoreGive(mutex_writer_bin);
         return 0;
     }
@@ -311,11 +311,11 @@ size_t SerialWireless_::writeBin(const uint8_t *data, size_t len) {
 
 void SerialWireless_::SendPacket(const uint8_t *data, const uint8_t &len, const uint8_t &packetID) {
     /*
-    TODO: gestire fifo separate per controllo ??? valutare
+    TODO: handle separate fifos for control ??? evaluate
     switch (packetID)
     {
     case PACKET_TX::MOUSE_TX:
-      // gestire una fifo separata ?
+      // handle a separate fifo ?
       break;
     case PACKET_TX::KEYBOARD_TX:
       //
@@ -376,31 +376,31 @@ void SerialWireless_::begin() {
     wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&wifi_init_config);
     esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_start();
 
-    /*
     esp_err_t err = esp_wifi_start();
     if (err != ESP_OK) {
-      log_e("WiFi not started! 0x%x)", err);
-      return false;
+        Serial.printf("WiFi not started! 0x%x)", err);
+        return;
     }
-    */
 
     // WiFi.macAddress(mac_esp_interface); // register the mac address of the card
 
     esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac_esp_interface);
     if (err != ESP_OK) {
         Serial.println("Failed to read MAC address");
+        return;
     }
 
     err = esp_wifi_set_channel(espnow_wifi_channel, WIFI_SECOND_CHAN_NONE);
     if (err != ESP_OK) {
         Serial.printf("esp_wifi_set_channel failed! 0x%x", err);
+        return;
     }
 
     err = esp_wifi_set_max_tx_power(espnow_wifi_power);  // from 8 to 84 corresponding to 2dbm to 20 dbm);
     if (err != ESP_OK) {
         Serial.printf("esp_wifi_set_max_tx_power failed! 0x%x", err);
+        return;
     }
 
     // WiFi.disconnect();  // ???
@@ -411,6 +411,7 @@ void SerialWireless_::begin() {
     err = esp_now_init();
     if (err != ESP_OK) {
         Serial.printf("esp_now_init failed! 0x%x", err);
+        return;
     }
 
     if (lastDongleSave) {
@@ -425,17 +426,20 @@ void SerialWireless_::begin() {
     peerInfo.channel = espnow_wifi_channel;
     peerInfo.encrypt = false;
     if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        // Serial.println("Errore nell'aggiunta del peer");
+        Serial.println("Errore nell'aggiunta del peer");
+        return;
     }
 
     err = esp_now_register_recv_cb(_esp_now_rx_cb);
     if (err != ESP_OK) {
-        // Serial.printf("esp_now_register_recv_cb failed! 0x%x", err);
+        Serial.printf("esp_now_register_recv_cb failed! 0x%x", err);
+        return;
     }
 
     err = esp_now_register_send_cb(_esp_now_tx_cb);
     if (err != ESP_OK) {
-        // Serial.printf("esp_now_register_send_cb failed! 0x%x", err);
+        Serial.printf("esp_now_register_send_cb failed! 0x%x", err);
+        return;
     }
 
     myConfig.port =
@@ -456,7 +460,7 @@ bool SerialWireless_::end() {
     esp_now_del_peer(peerAddress);
     esp_err_t err = esp_now_deinit();
     if (err != ESP_OK) {
-        // Serial.printf("esp_now_deinit failed! 0x%x", err);
+        Serial.printf("esp_now_deinit failed! 0x%x", err);
         return false;
     }
     // WiFi.disconnect(true);
@@ -509,19 +513,19 @@ bool SerialWireless_::connection_dongle() {
     #endif      // DONGLE
 
                 if (esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
-                    // Serial.printf("DONGLE - esp_wifi_set_channel failed!");
+                    Serial.printf("DONGLE - esp_wifi_set_channel failed!");
                 }
                 peerInfo.channel = channel;
                 if (esp_now_mod_peer(&peerInfo) != ESP_OK) {  // modify the peer channel
-                    // Serial.println("DONGLE - Error in channel modification");
+                    Serial.println("DONGLE - Error in channel modification");
                 }
                 lastMillis_change_channel = millis();
                 lastMillis_tx_packet = 0;  // to make it send a packet immediately on the new channel
             }
             if ((millis() - lastMillis_tx_packet) > TIMEOUT_TX_PACKET) {
                 SerialWireless.SendPacket((const uint8_t *)aux_buffer_tx, 13, PACKET_TX::CONNECTION);
-                // Serial.print("DONGLE - sent broadcast packet on channel: ");
-                // Serial.println(channel);
+                Serial.print("DONGLE - sent broadcast packet on channel: ");
+                Serial.println(channel);
                 lastMillis_tx_packet = millis();
             }
             lastMillis_start_dialogue = millis();
@@ -529,7 +533,7 @@ bool SerialWireless_::connection_dongle() {
             if (((millis() - lastMillis_start_dialogue) > TIMEOUT_DIALOGUE) &&
                 wireless_connection_state != CONNECTION_STATE::DEVICES_CONNECTED) {
                 wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;
-                // Serial.println("DONGLE - Negotiation between DONGLE/GUN was not completed and we start over");
+                Serial.println("DONGLE - Negotiation between DONGLE/GUN was not completed and we start over");
                 lastMillis_change_channel = millis();
             }
         }
@@ -538,14 +542,14 @@ bool SerialWireless_::connection_dongle() {
 
     // Serial.println("DONGLE - Negotiation completed - association of GUN/DONGLE devices");
     if (esp_now_del_peer(peerAddress) != ESP_OK) {  // delete the broadcast from peers
-        // Serial.println("DONGLE - Error in broadcast peer deletion");
+        Serial.println("DONGLE - Error in broadcast peer deletion");
     }
     memcpy(peerAddress, mac_esp_another_card, 6);
     memcpy(peerInfo.peer_addr, peerAddress, 6);
     // peerInfo.channel = ESPNOW_WIFI_CHANNEL;
     // peerInfo.encrypt = false;
     if (esp_now_add_peer(&peerInfo) != ESP_OK) {  // inserts the dongle in peers
-        // Serial.println("DONGLE - Error adding new GUN peer");
+        Serial.println("DONGLE - Error adding new GUN peer");
     }
     TinyUSBDevices.onBattery = true;
     return true;
@@ -589,29 +593,25 @@ bool SerialWireless_::connection_gun_at_last_dongle() {
 }
 
 bool SerialWireless_::connection_gun() {
-    Serial.println("Connection gun");
     #define TIMEOUT_GUN_DIALOGUE 1000  // in milliseconds
     unsigned long lastMillis_start_dialogue = millis();
 
     lastMillis_start_dialogue = millis();
     wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;
     // SET THE PEER BOARCAST HERE ======================
-    Serial.println("Delete peer");
     if (esp_now_del_peer(peerAddress) != ESP_OK) {  // delete the broadcast from peers
-                                                    // Serial.println("Error in peer deletion");
+        Serial.println("Error in peer deletion");
     }
-    Serial.println("Copy peer address");
     memcpy(peerAddress, BROADCAST_ADDR, 6);
     memcpy(peerInfo.peer_addr, peerAddress, 6);
     // peerInfo.channel = ESPNOW_WIFI_CHANNEL;
     // peerInfo.encrypt = false;
     Serial.println("Add peer");
     if (esp_now_add_peer(&peerInfo) != ESP_OK) {  // insert the dongle in peers
-                                                  // Serial.println("Error in peer addition");
+        Serial.println("Error in peer addition");
     }
     // ====================================================
 
-    Serial.println("Start dialogue");
     while (
     #ifndef WIRELESS_ONLY
         !TinyUSBDevice.mounted() &&
@@ -626,10 +626,8 @@ bool SerialWireless_::connection_gun() {
             wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;
         }
     }
-    Serial.println("End dialogue");
 
     if (wireless_connection_state == CONNECTION_STATE::TX_GUN_TO_DONGLE_CONFIRM) {
-        Serial.println("Delete peer 2");
         if (esp_now_del_peer(peerAddress) != ESP_OK) {  // delete the broadcast from peers
                                                         // Serial.println("Error in peer deletion");
         }

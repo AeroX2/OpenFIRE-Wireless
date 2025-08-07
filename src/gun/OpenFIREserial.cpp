@@ -69,7 +69,7 @@ void OF_Serial::SerialProcessing() {
             switch (Serial.read()) {
                 // input mode
                 case '0':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     switch (Serial.read()) {
                         case '2':  // "hybrid" - just use the default m&kb mode
                         case '0':  // mouse & kb
@@ -117,7 +117,7 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // offscreen button mode
                 case '1':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     switch (Serial.read()) {
                         // cursor in bottom left - just use disabled
                         case '1':
@@ -152,7 +152,7 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // pedal functionality
                 case '2':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     switch (Serial.read()) {
                         // separate button (default to original binds)
                         case '0':
@@ -181,7 +181,7 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // aspect ratio correction
                 case '3':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     serialARcorrection = Serial.read() - '0';
                     if (!serialMode) {
                         if (serialARcorrection) {
@@ -194,18 +194,18 @@ void OF_Serial::SerialProcessing() {
     #ifdef USES_TEMP
                 // temp sensor disabling (why?)
                 case '4':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     Serial.read();
                     break;
     #endif  // USES_TEMP
             // autoreload (TODO: maybe?)
                 case '5':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     Serial.read();
                     break;
                 // rumble only mode (enable Rumble FF)
                 case '6':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     switch (Serial.read()) {
                         // disable
                         case '0':
@@ -406,7 +406,7 @@ void OF_Serial::SerialProcessing() {
     #ifdef USES_SOLENOID
                 // Solenoid bits
                 case '0':
-                    Serial.read();  // nomf the padding
+                    Serial.read();  // skip padding byte
                     switch (Serial.read()) {
                         // Solenoid "on" command
                         case '1':
@@ -433,7 +433,7 @@ void OF_Serial::SerialProcessing() {
                         // Solenoid "pulse" command (only if not already pulsing)
                         case '2':
                             if (!serialQueue[SerialQueue_SolPulse]) {
-                                Serial.read();  // nomf the padding bit.
+                                Serial.read();  // skip padding bit
                                 if (Serial.peek() >= '0' & Serial.peek() <= '9') {
                                     serialQueue[SerialQueue_SolPulse] = true;
                                     char serialInputS[4] = {0, 0, 0, 0};
@@ -459,7 +459,7 @@ void OF_Serial::SerialProcessing() {
     #ifdef USES_RUMBLE
                 // Rumble bits
                 case '1':
-                    Serial.read();  // nomf the padding
+                    Serial.read();  // skip padding byte
                     switch (Serial.read()) {
                         // Rumble "on" command
                         case '1':
@@ -468,7 +468,7 @@ void OF_Serial::SerialProcessing() {
                         // Rumble "pulse" command (only if not already pulsing)
                         case '2':
                             if (!serialQueue[SerialQueue_RumbPulse]) {
-                                Serial.read();  // nomf the padding
+                                Serial.read();  // skip padding byte
                                 if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                     serialQueue[SerialQueue_RumbPulse] = true;
                                     char serialInputS[4] = {0, 0, 0, 0};
@@ -494,11 +494,11 @@ void OF_Serial::SerialProcessing() {
     #ifdef LED_ENABLE
                 // LED Red bits
                 case '2':
-                    Serial.read();  // nomf the padding
+                    Serial.read();  // skip padding byte
                     switch (Serial.read()) {
                         // LED Red "static on" command
                         case '1':
-                            Serial.read();  // nomf
+                            Serial.read();  // skip unused byte
                             if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                 serialLEDChange = true;
                                 serialQueue[SerialQueue_Red] = true;
@@ -517,7 +517,7 @@ void OF_Serial::SerialProcessing() {
                         // LED Red "pulse" command (only if not already pulsing)
                         case '2':
                             if (!serialQueue[SerialQueue_LEDPulse]) {
-                                Serial.read();  // nomf
+                                Serial.read();  // skip unused byte
                                 if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                     serialLEDChange = true, serialQueue[SerialQueue_LEDPulse] = true,
                                     serialLEDPulseColorMap =
@@ -542,11 +542,11 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // LED Green bits
                 case '3':
-                    Serial.read();  // nomf the padding
+                    Serial.read();  // skip padding byte
                     switch (Serial.read()) {
                         // LED Green "static on" command
                         case '1':
-                            Serial.read();  // nomf
+                            Serial.read();  // skip unused byte
                             if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                 serialLEDChange = true, serialQueue[SerialQueue_Green] = true;
                                 char serialInputS[4] = {0, 0, 0, 0};
@@ -562,7 +562,7 @@ void OF_Serial::SerialProcessing() {
                         // LED Green "pulse" command (only if not already pulsing)
                         case '2':
                             if (!serialQueue[SerialQueue_LEDPulse]) {
-                                Serial.read();  // nomf
+                                Serial.read();  // skip unused byte
                                 if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                     serialLEDChange = true, serialQueue[SerialQueue_LEDPulse] = true,
                                     serialLEDPulseColorMap =
@@ -587,11 +587,11 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // LED Blue bits
                 case '4':
-                    Serial.read();  // nomf the padding
+                    Serial.read();  // skip padding byte
                     switch (Serial.read()) {
                         // LED Blue "static on" command
                         case '1':
-                            Serial.read();  // nomf
+                            Serial.read();  // skip unused byte
                             if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                 serialLEDChange = true, serialQueue[SerialQueue_Blue] = true;
                                 char serialInputS[4] = {0, 0, 0, 0};
@@ -608,7 +608,7 @@ void OF_Serial::SerialProcessing() {
                         // LED Blue "pulse" command (only if not already pulsing)
                         case '2':
                             if (!serialQueue[SerialQueue_LEDPulse]) {
-                                Serial.read();  // nomf
+                                Serial.read();  // skip unused byte
                                 if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                     serialLEDChange = true, serialQueue[SerialQueue_LEDPulse] = true,
                                     serialLEDPulseColorMap =
@@ -636,7 +636,7 @@ void OF_Serial::SerialProcessing() {
                 case 'D':
                     switch (Serial.read()) {
                         case 'A':
-                            Serial.read();  // nomf the padding
+                            Serial.read();  // skip padding byte
                             if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                 char serialInputS[4] = {0, 0, 0, 0};
                                 for (uint n = 0; n < 3; ++n) {
@@ -650,7 +650,7 @@ void OF_Serial::SerialProcessing() {
                             }
                             break;
                         case 'L':
-                            Serial.read();  // nomf the padding
+                            Serial.read();  // skip padding byte
                             if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                                 char serialInputS[4] = {0, 0, 0, 0};
                                 for (uint n = 0; n < 3; ++n) {
@@ -687,10 +687,10 @@ void OF_Serial::SerialProcessing() {
             switch (Serial.read()) {
                 // Solenoid
                 case '0':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     if (Serial.peek() >= '0' && Serial.peek() <= '2') {
                         char serialInput = Serial.read();
-                        Serial.read();  // nomf
+                        Serial.read();  // skip unused byte
                         if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                             char serialInputS[4] = {0, 0, 0, 0};
                             for (uint n = 0; n < 3; ++n) {
@@ -718,10 +718,10 @@ void OF_Serial::SerialProcessing() {
                     break;
                 // Rumble
                 case '1':
-                    Serial.read();  // nomf
+                    Serial.read();  // skip unused byte
                     if (Serial.peek() >= '0' && Serial.peek() <= '2') {
                         char serialInput = Serial.read();
-                        Serial.read();  // nomf
+                        Serial.read();  // skip unused byte
                         if (Serial.peek() >= '0' && Serial.peek() <= '9') {
                             char serialInputS[4] = {0, 0, 0, 0};
                             for (uint n = 0; n < 3; ++n) {
@@ -1055,7 +1055,7 @@ void OF_Serial::SerialProcessingDocked() {
         //
         case OF_Const::sIRTest:
             if (FW_Common::camNotAvailable) {
-                Serial.read();  // nomf
+                Serial.read();  // skip unused byte
                 char message[2] = {OF_Const::sError, OF_Const::sErrCam};
                 Serial.write(message, sizeof(message));
             } else if (FW_Common::runMode == FW_Const::RunMode_Processing && Serial.read() == false) {
