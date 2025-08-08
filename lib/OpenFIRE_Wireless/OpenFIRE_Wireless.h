@@ -135,11 +135,27 @@ extern USB_Data_GUN_Wireless usb_data_wireless;
     #ifndef _SERIAL_STREAM_H_
         #define _SERIAL_STREAM_H_
 
+        // Maximum number of simultaneous connections (players)
+        #define MAX_CONNECTIONS 4
+
+// Structure to track connected devices
+typedef struct {
+    uint8_t mac_address[6];
+    uint8_t player_number;
+    bool is_connected;
+    USB_Data_GUN_Wireless device_data;
+} ConnectedDevice;
+
 class SerialWireless_ : public Stream {
    public:
     uint8_t mac_esp_interface[6];
     uint8_t mac_esp_another_card[6];
     uint8_t wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;  // 0;
+
+    // Multiple connection support
+    ConnectedDevice connected_devices[MAX_CONNECTIONS];
+    uint8_t current_player_number;
+    uint8_t num_connected_devices;
 
         // ======= for SERIAL FIFO ===============
         // ===== for write === linear buffer ====
@@ -227,6 +243,12 @@ class SerialWireless_ : public Stream {
     bool connection_dongle();
     bool connection_gun();
     bool connection_gun_at_last_dongle();
+
+    // Multiple connection management functions
+    bool add_connected_device(uint8_t mac[6], uint8_t player_number, USB_Data_GUN_Wireless &device_data);
+    bool remove_connected_device(uint8_t mac[6]);
+    ConnectedDevice *get_connected_device(uint8_t player_number);
+    void print_connected_devices();
 
     // ===============================
     // ===== for timers ================

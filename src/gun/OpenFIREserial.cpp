@@ -699,6 +699,7 @@ void OF_Serial::SerialProcessing() {
                                     break;
                             }
 
+    #ifdef USES_SOLENOID
                             switch (serialInput) {
                                 // hold length
                                 case '0':
@@ -713,6 +714,7 @@ void OF_Serial::SerialProcessing() {
                                 default:
                                     break;
                             }
+    #endif
                         }
                     }
                     break;
@@ -730,6 +732,7 @@ void OF_Serial::SerialProcessing() {
                                     break;
                             }
 
+    #ifdef USES_RUMBLE
                             switch (serialInput) {
                                 // hold length
                                 case '0':
@@ -744,6 +747,7 @@ void OF_Serial::SerialProcessing() {
                                 default:
                                     break;
                             }
+    #endif
                         }
                     }
                     break;
@@ -1357,9 +1361,13 @@ void OF_Serial::PrintResults() {
         return;
 
 #ifdef OPENFIRE_WIRELESS_ENABLE
+    #ifdef WIRELESS_ONLY
+    if (!SerialWireless) {
+    #else
     if (!(TinyUSBDevices.onBattery
               ? SerialWireless
               : TinyUSBDevice.mounted())) {  // 696969 then decide how to fix properly but this should work fine
+    #endif
 #else
     if (!Serial) {
 #endif

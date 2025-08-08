@@ -51,6 +51,8 @@
     #define OPENFIRE_BOARD "esp32-s3-devkitc-1"
 #elifdef ARDUINO_WAVESHARE_ESP32_S3_PICO
     #define OPENFIRE_BOARD "waveshare-esp32-s3-pico"
+#elifdef ARDUINO_SEEED_XIAO_ESP32C6
+    #define OPENFIRE_BOARD "seeed-xiao-esp32c6"
 #elifdef ARDUINO_GENERIC_RP2350
     #define OPENFIRE_BOARD "generic-rp2350"
 #else
@@ -448,6 +450,20 @@ class OF_Const {
                                      /*40*/ btnTrigger,  rumblePin,   solenoidPin, unavailable, unavailable,
                                      /*45*/ unavailable, unavailable, unavailable, unavailable}},
         //=====================================================================================================================
+        // SeeedStudio XIAO ESP32-C6
+        // Board Type: ESP32-C6
+        // Notes: ESP32-C6 has different pin layout than ESP32-S3
+        {"seeed-xiao-esp32c6", {/*00*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*05*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*10*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*15*/ btnUnmapped, btnUnmapped, camSCL,      btnUnmapped, camSDA,
+                                /*20*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*25*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*30*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*35*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*40*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
+                                /*45*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped}},
+        //=====================================================================================================================
         /* more ESP boards should be added here */
     };
 
@@ -465,6 +481,7 @@ class OF_Const {
         {"waveshareZero", "Waveshare Zero RP2040"},
         {"esp32-s3-devkitc-1", "ESP32-S3 WROOM-1 DevkitC-1 (N16R8)"},
         {"waveshare-esp32-s3-pico", "Waveshare ESP32-S3-Pico"},
+        {"seeed-xiao-esp32c6", "SeeedStudio XIAO ESP32-C6"},
         // Add more here!
         {"generic-rp2350", "Unknown RP2350 Board"},
         {"generic", "Unknown RP2040 Board"}};

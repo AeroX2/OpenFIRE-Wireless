@@ -204,6 +204,9 @@ class FW_Common {
     static inline bool triggerPressedOffscreen =
         false;  // Set if shot offscreen; determines whether we release trigger btn code 1 or 2
 
+    // Selector for which option in the simple pause menu you're scrolled on.
+    static inline uint8_t pauseModeSelection = 0;
+
 #ifdef USES_ANALOG
     static inline bool analogIsValid;  // Flag set true if analog stick is mapped to valid nums
     static inline uint32_t aStickADCLastPos =
@@ -217,8 +220,6 @@ class FW_Common {
 //// OLED Display interface
 #ifdef USES_DISPLAY
     static inline ExtDisplay OLED;
-    // Selector for which option in the simple pause menu you're scrolled on.
-    static inline uint8_t pauseModeSelection = 0;
     #ifdef MAMEHOOKER
     static inline uint16_t dispMaxLife = 0;         // Max value for life in lifebar mode (100%)
     static inline uint16_t dispLifePercentage = 0;  // Actual value to show in lifebar mode #%

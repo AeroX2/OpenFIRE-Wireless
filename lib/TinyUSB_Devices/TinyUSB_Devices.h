@@ -51,12 +51,8 @@
 
     #include "tusb_gamepad16.h"  // 696969 inserted for gamepad16
 
-    #ifdef OPENFIRE_WIRELESS_ENABLE
-        #ifdef ARDUINO_ARCH_ESP32
-            #include "ESP32/OpenFIRE_Wireless.h"
-        #else  // rp2040
-            #include "RP2040/OpenFIRE_Wireless.h"
-        #endif
+    #if defined(OPENFIRE_WIRELESS_ENABLE) && defined(ARDUINO_ARCH_ESP32)
+        #include "OpenFIRE_Wireless.h"
     #endif  // OPENFIRE_WIRELESS_ENABLE
 
     /*****************************

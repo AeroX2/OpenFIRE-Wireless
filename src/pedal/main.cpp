@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
-#include "ESP32/OpenFIRE_Wireless.h"
 #include "OpenFIRE_Packet.h"
+#include "OpenFIRE_Wireless.h"
 #include "TinyUSB_Devices.h"
 
 // Button configuration - only pedal
@@ -76,6 +76,17 @@ void setup() {
     // Initialize wireless
     SerialWireless.begin();
     Serial.println("Wireless initialized");
+
+// Set up USB data for wireless communication
+#if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
+    strncpy(usb_data_wireless.deviceManufacturer, "OpenFIRE", sizeof(usb_data_wireless.deviceManufacturer));
+    strncpy(usb_data_wireless.deviceName, "Pedal", sizeof(usb_data_wireless.deviceName));
+    usb_data_wireless.deviceVID = 0x1234;  // Example VID
+    usb_data_wireless.devicePID = PLAYER_NUMBER;
+    usb_data_wireless.devicePlayer = PLAYER_NUMBER;
+    usb_data_wireless.channel = espnow_wifi_channel;
+    usb_data_wireless.deviceType = 'P';  // Pedal device type
+#endif
 
     // Try to connect
     SerialWireless.connection_gun();

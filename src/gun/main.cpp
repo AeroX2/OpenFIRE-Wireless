@@ -136,11 +136,12 @@ void setup() {
     usb_data_wireless.devicePID = PLAYER_NUMBER;  // changes
     usb_data_wireless.devicePlayer = PLAYER_NUMBER;
     usb_data_wireless.channel = espnow_wifi_channel;
-#endif  // defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
+    usb_data_wireless.deviceType = 'G';  // Gun device type
+#endif                                   // defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
 // ===============================================================
 
 // We're setting our custom USB identifiers, as defined in the configuration area!
-#ifdef USE_TINYUSB
+#if defined(USE_TINYUSB) && !defined(WIRELESS_ONLY)
     // Initializes TinyUSB identifier
     if (!TinyUSBDevice.isInitialized()) {  // 696969 added ..it worked the same, but this is safer ..
                                            // definitely needed for Esp32 with library not integrated in the core
@@ -280,11 +281,18 @@ void setup() {
     TinyUSBDevices.begin(POLL_RATE);
         #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)  // IF WIRELESS
             #define MILLIS_TIMEOUT 1000                                       // 1 second
+            #ifndef WIRELESS_ONLY
     unsigned long lastMillis = millis();
     while ((millis() - lastMillis <= MILLIS_TIMEOUT) && (!TinyUSBDevice.mounted())) {
         yield();
     }
+            #endif
+
+            #ifndef WIRELESS_ONLY
     if (!TinyUSBDevice.mounted()) {
+            #else
+    {
+            #endif
         SerialWireless.begin();  // do a sort of prebegin, without setting peer and other things
         if (lastDongleSave) {
             // TRY TO CONNECT TO THE PREVIOUS DONGLE BY SENDING THE CHECK_CONNECTION PACKET
@@ -298,15 +306,21 @@ void setup() {
             SerialWireless.connection_gun();
         }
     }
-        #endif                                                                // OPENFIRE_WIRELESS_ENABLE
+        #endif  // OPENFIRE_WIRELESS_ENABLE
 
+        #ifndef WIRELESS_ONLY
     while (!TinyUSBDevice.mounted() && !TinyUSBDevices.onBattery) {
         yield();
     }
+        #endif
 
-    // arrives here only if USB has been connected or a wireless connection has been negotiated and established
+        // arrives here only if USB has been connected or a wireless connection has been negotiated and established
 
+        #ifndef WIRELESS_ONLY
     if (TinyUSBDevice.mounted()) {
+        #else
+    if (false) {
+        #endif
         Serial.begin(9600);
         Serial.setTimeout(0);
         #if defined(ARDUINO_ARCH_ESP32)
@@ -332,9 +346,11 @@ void setup() {
     else {
         if (!lastDongleSave || (lastDongleSave && !(memcmp(lastDongleAddress, peerAddress, 6) == 0)))
             OF_Prefs::SaveLastDongleWireless(peerAddress);
-        // CLOSE EVERYTHING THAT IS USB IF IT NEEDS TO BE CLOSED
+            // CLOSE EVERYTHING THAT IS USB IF IT NEEDS TO BE CLOSED
+            #ifndef WIRELESS_ONLY
         TinyUSBDevice.clearConfiguration();
         TinyUSBDevice.detach();
+            #endif
         Serial_OpenFIRE_Stream = &SerialWireless;
     }
         #endif
@@ -392,7 +408,9 @@ void setup() {
         // This is a first boot! Prompt to start calibration.
         unsigned int timerIntervalShort = 600;
         unsigned int timerInterval = 1000;
+#ifdef USES_LED
         OF_RGB::LedOff();
+#endif
         unsigned long lastT = millis();
         bool LEDisOn = false;
 
@@ -426,6 +444,7 @@ void setup() {
             FW_Common::buttons.Poll(1);
             FW_Common::buttons.Repeat();
 
+#ifdef USES_LED
             // LED update:
             if (LEDisOn) {
                 unsigned long t = millis();
@@ -442,6 +461,7 @@ void setup() {
                     lastT = millis();
                 }
             }
+#endif
         }
 
         // skip cali if we're prematurely set to run from the above loop

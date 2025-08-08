@@ -9,7 +9,7 @@
             #ifdef USE_LOVYAN_GFX
                 #include <LovyanGFX.hpp>
 
-                #include "..\..\src\LGFX_096_ST7735S_80x160.hpp"
+                #include "LGFX_096_ST7735S_80x160.hpp"
 extern LGFX tft;
             #else
                 #include <Adafruit_ST7735.h>
@@ -18,7 +18,9 @@ extern Adafruit_ST7735 tft;
         #endif      // USES_DISPLAY
     #endif          // DONGLE
 
-    #define ESPNOW_WIFI_CHANNEL_DEFAULT 12
+    #ifndef ESPNOW_WIFI_CHANNEL_DEFAULT
+        #define ESPNOW_WIFI_CHANNEL_DEFAULT 12
+    #endif  // ESPNOW_WIFI_CHANNEL_DEFAULT
 
     // transmission power can range from 8 to 84, where 84 is the maximum value corresponding to 20 db
     #define ESPNOW_WIFI_POWER_DEFAULT 84
@@ -320,7 +322,7 @@ void SerialWireless_::SendPacket(const uint8_t *data, const uint8_t &len, const 
     case PACKET_TX::KEYBOARD_TX:
       //
       break;
-    case PACKET_TX::GAMEPADE_TX:
+    case PACKET_TX::GAMEPAD_TX:
       //
       break;
     default:
@@ -385,7 +387,7 @@ void SerialWireless_::begin() {
 
     // WiFi.macAddress(mac_esp_interface); // register the mac address of the card
 
-    esp_err_t err = esp_wifi_get_mac(WIFI_IF_STA, mac_esp_interface);
+    err = esp_wifi_get_mac(WIFI_IF_STA, mac_esp_interface);
     if (err != ESP_OK) {
         Serial.println("Failed to read MAC address");
         return;
@@ -481,6 +483,15 @@ bool SerialWireless_::connection_dongle() {
     unsigned long lastMillis_start_dialogue = millis();
     uint8_t aux_buffer_tx[13];
 
+    // Initialize multiple connection support
+    SerialWireless.current_player_number = PLAYER_NUMBER;
+    SerialWireless.num_connected_devices = 0;
+    for (int i = 0; i < MAX_CONNECTIONS; i++) {
+        SerialWireless.connected_devices[i].is_connected = false;
+        memset(SerialWireless.connected_devices[i].mac_address, 0xFF, 6);
+        SerialWireless.connected_devices[i].player_number = 0;
+    }
+
     wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;
     aux_buffer_tx[0] = CONNECTION_STATE::TX_DONGLE_SEARCH_GUN_BROADCAST;
     memcpy(&aux_buffer_tx[1], SerialWireless.mac_esp_interface, 6);
@@ -494,7 +505,11 @@ bool SerialWireless_::connection_dongle() {
         #endif  // USES_DISPLAY
     #endif      // DONGLE
 
-    while (wireless_connection_state != CONNECTION_STATE::DEVICES_CONNECTED) {
+    // Wait for both gun and pedal to connect
+    bool gun_connected = false;
+    bool pedal_connected = false;
+    
+    while (!gun_connected || !pedal_connected) {
         if (wireless_connection_state == CONNECTION_STATE::NONE_CONNECTION) {
             if (((millis() - lastMillis_change_channel) > TIMEOUT_CHANGE_CHANNEL) &&
                 ((millis() - (lastMillis_tx_packet - 50))) >
@@ -530,28 +545,50 @@ bool SerialWireless_::connection_dongle() {
             }
             lastMillis_start_dialogue = millis();
         } else {
+            // Check if we have both gun and pedal connected
+            gun_connected = false;
+            pedal_connected = false;
+            
+            for (int i = 0; i < MAX_CONNECTIONS; i++) {
+                if (SerialWireless.connected_devices[i].is_connected) {
+                    if (SerialWireless.connected_devices[i].device_data.deviceType == 'G') {
+                        gun_connected = true;
+                    } else if (SerialWireless.connected_devices[i].device_data.deviceType == 'P') {
+                        pedal_connected = true;
+                    }
+                }
+            }
+            
             if (((millis() - lastMillis_start_dialogue) > TIMEOUT_DIALOGUE) &&
-                wireless_connection_state != CONNECTION_STATE::DEVICES_CONNECTED) {
+                (!gun_connected || !pedal_connected)) {
                 wireless_connection_state = CONNECTION_STATE::NONE_CONNECTION;
-                Serial.println("DONGLE - Negotiation between DONGLE/GUN was not completed and we start over");
+                Serial.println("DONGLE - Waiting for both gun and pedal to connect...");
+                Serial.printf("Gun connected: %s, Pedal connected: %s\n", 
+                            gun_connected ? "YES" : "NO", 
+                            pedal_connected ? "YES" : "NO");
                 lastMillis_change_channel = millis();
             }
         }
         yield();  // waiting for connection establishment
     }
 
+    // Set the connection state to connected when both devices are ready
+    wireless_connection_state = CONNECTION_STATE::DEVICES_CONNECTED;
+    
     // Serial.println("DONGLE - Negotiation completed - association of GUN/DONGLE devices");
     if (esp_now_del_peer(peerAddress) != ESP_OK) {  // delete the broadcast from peers
         Serial.println("DONGLE - Error in broadcast peer deletion");
     }
-    memcpy(peerAddress, mac_esp_another_card, 6);
-    memcpy(peerInfo.peer_addr, peerAddress, 6);
-    // peerInfo.channel = ESPNOW_WIFI_CHANNEL;
-    // peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {  // inserts the dongle in peers
-        Serial.println("DONGLE - Error adding new GUN peer");
-    }
+    
+    // Note: We don't set a single peer address since we have multiple devices
+    // The peer management is handled by the connected_devices array
+    
     TinyUSBDevices.onBattery = true;
+    
+    // Print connection status
+    Serial.println("DONGLE - Connection setup complete - Both gun and pedal connected");
+    SerialWireless.print_connected_devices();
+    
     return true;
 }
 
@@ -606,7 +643,6 @@ bool SerialWireless_::connection_gun() {
     memcpy(peerInfo.peer_addr, peerAddress, 6);
     // peerInfo.channel = ESPNOW_WIFI_CHANNEL;
     // peerInfo.encrypt = false;
-    Serial.println("Add peer");
     if (esp_now_add_peer(&peerInfo) != ESP_OK) {  // insert the dongle in peers
         Serial.println("Error in peer addition");
     }
@@ -646,6 +682,72 @@ bool SerialWireless_::connection_gun() {
     return false;
 }
 
+// Multiple connection management functions
+bool SerialWireless_::add_connected_device(uint8_t mac[6], uint8_t player_number, USB_Data_GUN_Wireless& device_data) {
+    if (SerialWireless.num_connected_devices >= MAX_CONNECTIONS) {
+        return false; // No space available
+    }
+    
+    // Check if device already exists
+    for (int i = 0; i < SerialWireless.num_connected_devices; i++) {
+        if (memcmp(SerialWireless.connected_devices[i].mac_address, mac, 6) == 0) {
+            return false; // Device already connected
+        }
+    }
+    
+    // Add new device
+    int index = SerialWireless.num_connected_devices;
+    memcpy(SerialWireless.connected_devices[index].mac_address, mac, 6);
+    SerialWireless.connected_devices[index].player_number = player_number;
+    SerialWireless.connected_devices[index].is_connected = true;
+    memcpy(&SerialWireless.connected_devices[index].device_data, &device_data, sizeof(USB_Data_GUN_Wireless));
+    SerialWireless.num_connected_devices++;
+    
+    Serial.print("Added device for player ");
+    Serial.println(player_number);
+    return true;
+}
+
+bool SerialWireless_::remove_connected_device(uint8_t mac[6]) {
+    for (int i = 0; i < SerialWireless.num_connected_devices; i++) {
+        if (memcmp(SerialWireless.connected_devices[i].mac_address, mac, 6) == 0) {
+            // Remove device by shifting remaining devices
+            for (int j = i; j < SerialWireless.num_connected_devices - 1; j++) {
+                SerialWireless.connected_devices[j] = SerialWireless.connected_devices[j + 1];
+            }
+            SerialWireless.num_connected_devices--;
+            Serial.print("Removed device for player ");
+            Serial.println(SerialWireless.connected_devices[i].player_number);
+            return true;
+        }
+    }
+    return false; // Device not found
+}
+
+ConnectedDevice* SerialWireless_::get_connected_device(uint8_t player_number) {
+    for (int i = 0; i < SerialWireless.num_connected_devices; i++) {
+        if (SerialWireless.connected_devices[i].is_connected && SerialWireless.connected_devices[i].player_number == player_number) {
+            return &SerialWireless.connected_devices[i];
+        }
+    }
+    return nullptr; // Device not found
+}
+
+void SerialWireless_::print_connected_devices() {
+    Serial.print("Connected devices: ");
+    Serial.println(SerialWireless.num_connected_devices);
+    for (int i = 0; i < SerialWireless.num_connected_devices; i++) {
+        Serial.print("  Player ");
+        Serial.print(SerialWireless.connected_devices[i].player_number);
+        Serial.print(" - MAC: ");
+        for (int j = 0; j < 6; j++) {
+            Serial.printf("%02X", SerialWireless.connected_devices[i].mac_address[j]);
+            if (j < 5) Serial.print(":");
+        }
+        Serial.println();
+    }
+}
+
 void packet_callback_read_dongle() {
     switch (SerialWireless.packet.currentPacketID()) {
         case PACKET_TX::SERIAL_TX:
@@ -657,7 +759,7 @@ void packet_callback_read_dongle() {
             usbHid.sendReport(HID_RID_e::HID_RID_MOUSE, &SerialWireless.packet.rxBuff[PREAMBLE_SIZE],
                               SerialWireless.packet.bytesRead);
             break;
-        case PACKET_TX::GAMEPADE_TX:
+        case PACKET_TX::GAMEPAD_TX:
             usbHid.sendReport(HID_RID_e::HID_RID_GAMEPAD, &SerialWireless.packet.rxBuff[PREAMBLE_SIZE],
                               SerialWireless.packet.bytesRead);
             break;
@@ -667,7 +769,6 @@ void packet_callback_read_dongle() {
             break;
     #endif
         case PACKET_TX::CHECK_CONNECTION_LAST_DONGLE:
-            // CODICE
             memcpy(aux_buffer, &SerialWireless.packet.rxBuff[PREAMBLE_SIZE], SerialWireless.packet.bytesRead);
             switch (aux_buffer[0]) {
                 case CONNECTION_STATE::TX_CHECK_CONNECTION_LAST_DONGLE:
@@ -704,24 +805,59 @@ void packet_callback_read_dongle() {
                 case CONNECTION_STATE::TX_GUN_TO_DONGLE_PRESENCE:
                     if ((memcmp(&aux_buffer[7], SerialWireless.mac_esp_interface, 6) == 0) &&
                         SerialWireless.wireless_connection_state == CONNECTION_STATE::NONE_CONNECTION) {
-                        memcpy(SerialWireless.mac_esp_another_card, &aux_buffer[1], 6);
-                        aux_buffer[0] = CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT;
-                        memcpy(&aux_buffer[1], SerialWireless.mac_esp_interface, 6);
-                        memcpy(&aux_buffer[7], SerialWireless.mac_esp_another_card, 6);
-                        SerialWireless.SendPacket((const uint8_t *)aux_buffer, 13, PACKET_TX::CONNECTION);
-                        // Serial.println("DONGLE - sent connection confirmation packet");
+                        
+                        // Extract gun data to check player number
+                        USB_Data_GUN_Wireless gun_data;
+                        Serial.println("DONGLE - gun data");
+                        Serial.println(SerialWireless.packet.bytesRead);
+                        Serial.println(sizeof(USB_Data_GUN_Wireless));
+                        if (SerialWireless.packet.bytesRead >= 13 + sizeof(USB_Data_GUN_Wireless)) {
+                            memcpy(&gun_data, &aux_buffer[13], sizeof(USB_Data_GUN_Wireless));
+                        
+                            // Check if this gun is for our player number
+                            if (gun_data.devicePlayer == SerialWireless.current_player_number) {
+                                // Check if we already have a connection for this player
+                                bool already_connected = false;
+                                for (int i = 0; i < MAX_CONNECTIONS; i++) {
+                                    if (SerialWireless.connected_devices[i].is_connected && 
+                                        SerialWireless.connected_devices[i].player_number == SerialWireless.current_player_number) {
+                                        already_connected = true;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!already_connected && SerialWireless.num_connected_devices < MAX_CONNECTIONS) {
+                                    memcpy(SerialWireless.mac_esp_another_card, &aux_buffer[1], 6);
+                                    aux_buffer[0] = CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT;
+                                    memcpy(&aux_buffer[1], SerialWireless.mac_esp_interface, 6);
+                                    memcpy(&aux_buffer[7], SerialWireless.mac_esp_another_card, 6);
+                                    SerialWireless.SendPacket((const uint8_t *)aux_buffer, 13, PACKET_TX::CONNECTION);
+                                    // Serial.println("DONGLE - sent connection confirmation packet");
 
-                        // ensure that the data has been sent
-
-                        SerialWireless.wireless_connection_state = CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT;
+                                    // ensure that the data has been sent
+                                    SerialWireless.wireless_connection_state = CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT;
+                                }
+                            }
+                        } 
                     }
                     break;
                 case CONNECTION_STATE::TX_GUN_TO_DONGLE_CONFIRM:
                     if ((memcmp(&aux_buffer[1], SerialWireless.mac_esp_another_card, 6) == 0) &&
                         (memcmp(&aux_buffer[7], SerialWireless.mac_esp_interface, 6) == 0) &&
                         SerialWireless.wireless_connection_state == CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT) {
+                        
                         // SAVE THE DATA RELATING TO THE GUN VID, PID, PLAYER , ETC.
-                        memcpy(&usb_data_wireless, &aux_buffer[13], sizeof(usb_data_wireless));
+                        USB_Data_GUN_Wireless gun_data;
+                        memcpy(&gun_data, &aux_buffer[13], sizeof(USB_Data_GUN_Wireless));
+                        
+                        // Add to connected devices list using helper function
+                        if (SerialWireless.add_connected_device(SerialWireless.mac_esp_another_card, gun_data.devicePlayer, gun_data)) {
+                            Serial.print("DONGLE - Connected to gun for player ");
+                            Serial.println(gun_data.devicePlayer);
+                        }
+                        
+                        // Update main USB data for compatibility
+                        memcpy(&usb_data_wireless, &gun_data, sizeof(USB_Data_GUN_Wireless));
                         SerialWireless.wireless_connection_state = CONNECTION_STATE::DEVICES_CONNECTED;
                         // Serial.println("DONGLE - received connection packet with GUN data");
                     }
@@ -736,27 +872,20 @@ void packet_callback_read_dongle() {
 }
 
 void packet_callback_read_gun() {
-    Serial.println("Packet callback read gun");
-    Serial.println(SerialWireless.packet.currentPacketID());
     switch (SerialWireless.packet.currentPacketID()) {
         case PACKET_TX::SERIAL_TX:
             SerialWireless.write_on_rx_serialBuffer(&SerialWireless.packet.rxBuff[PREAMBLE_SIZE],
                                                     SerialWireless.packet.bytesRead);
             break;
         case PACKET_TX::MOUSE_TX:
-            /* code */
             break;
         case PACKET_TX::GAMEPAD_TX:
-            /* code */
             break;
         case PACKET_TX::KEYBOARD_TX:
-            /* code */
             break;
         case PACKET_TX::CHECK_CONNECTION_LAST_DONGLE:
             // CODE TO EVALUATE WHETHER TO DO A CHECK IF THE GUN IS STILL CONNECTED .. IF NOT RESTART THE CARD ?
-            Serial.println("Check connection last dongle");
             memcpy(aux_buffer, &SerialWireless.packet.rxBuff[PREAMBLE_SIZE], SerialWireless.packet.bytesRead);
-            Serial.println("Copy aux buffer");
             switch (aux_buffer[0]) {
                 case CONNECTION_STATE::TX_CONFIRM_CONNECTION_LAST_DONGLE:
                     if ((memcmp(&aux_buffer[1], peerAddress, 6) == 0) &&
@@ -770,11 +899,9 @@ void packet_callback_read_gun() {
             }
             break;
         case PACKET_TX::CONNECTION:
-            Serial.println("Connection");
             memcpy(
                 aux_buffer, &SerialWireless.packet.rxBuff[PREAMBLE_SIZE],
                 SerialWireless.packet.bytesRead);  // 13); //sizeof(aux_buffer)); // it's also fine to copy 13 as data
-            Serial.println("Copy aux buffer 2");
             switch (aux_buffer[0]) {
                 case CONNECTION_STATE::TX_DONGLE_SEARCH_GUN_BROADCAST:
                     if (SerialWireless.wireless_connection_state ==
@@ -784,13 +911,15 @@ void packet_callback_read_gun() {
                         aux_buffer[0] = CONNECTION_STATE::TX_GUN_TO_DONGLE_PRESENCE;
                         memcpy(&aux_buffer[1], SerialWireless.mac_esp_interface, 6);
                         memcpy(&aux_buffer[7], SerialWireless.mac_esp_another_card, 6);
-                        SerialWireless.SendPacket((const uint8_t *)aux_buffer, 13, PACKET_TX::CONNECTION);
+                        // Include USB data in presence packet so dongle can check player number
+
+                        Serial.println("GUN - sending presence packet");
+                        Serial.println(sizeof(usb_data_wireless));
+                        memcpy(&aux_buffer[13], &usb_data_wireless, sizeof(usb_data_wireless));
+                        SerialWireless.SendPacket((const uint8_t *)aux_buffer, sizeof(aux_buffer), PACKET_TX::CONNECTION);
                         SerialWireless.wireless_connection_state = CONNECTION_STATE::TX_GUN_TO_DONGLE_PRESENCE;
                         // ensure that the data has been sent
                     }
-                    break;
-                case 2:
-                    /* code */
                     break;
                 case CONNECTION_STATE::TX_DONGLE_TO_GUN_ACCEPT:
                     if ((memcmp(&aux_buffer[1], SerialWireless.mac_esp_another_card, 6) == 0) &&

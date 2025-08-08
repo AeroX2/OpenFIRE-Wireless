@@ -111,6 +111,9 @@ void setup() {
     tft.setTextSize(2);
     tft.setTextColor(WHITE);
 #endif  // USES_DISPLAY
+    Serial.begin(115200);
+    Serial.setTimeout(0);
+    Serial.setTxTimeoutMs(0);
 
     // ====== wireless connection management ====================
     SerialWireless.begin();
@@ -129,9 +132,6 @@ void setup() {
 
     // Initializing the USB devices chunk.
     TinyUSBDevices.begin(1);
-    Serial.begin(9600);
-    Serial.setTimeout(0);
-    Serial.setTxTimeoutMs(0);
     // ====== end USB connection ==========================================================================
 
 #ifdef USES_DISPLAY
