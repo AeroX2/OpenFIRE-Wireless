@@ -1015,7 +1015,10 @@ void OF_Serial::SerialHandling() {
 
 // Serial Buffer in Docked Mode should always be being read by the main core on multicore systems
 void OF_Serial::SerialProcessingDocked() {
-    switch (Serial.read()) {
+    char c = Serial.read();
+    HWCDCSerial.println("Milad");
+    HWCDCSerial.println(c);
+    switch (c) {
         // Enter Docked Mode (in case running from first boot)
         case OF_Const::sDock1:
             Serial_available(1);

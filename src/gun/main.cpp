@@ -40,17 +40,20 @@ void esploop1(void *pvParameters) {
 
 // Sets up the environment
 void setup() {
+    HWCDCSerial.begin(9600);
+
 // ======== 696969 =========== X DUAL CORE ESP32 STARTUP ===================================
 #if defined(ARDUINO_ARCH_ESP32) && defined(DUAL_CORE)
-    #define STACK_SIZE_SECOND_CORE 10000            // enough 4096 ???
-    #define PRIORITY_SECOND_CORE 0                  // should be 1 ???
-    xTaskCreatePinnedToCore(esploop1,               /* Task function. */
-                            "loop1",                /* name of task. */
-                            STACK_SIZE_SECOND_CORE, /* Stack size of task */
-                            NULL,                   /* parameter of the task */
-                            PRIORITY_SECOND_CORE,   /* priority of the task */
-                            &task_loop1,            /* Task handle to keep track of created task */
-                            !ARDUINO_RUNNING_CORE); /* pin task to core 0 */
+    #define STACK_SIZE_SECOND_CORE 10000  // enough 4096 ???
+    #define PRIORITY_SECOND_CORE 0        // should be 1 ???
+    xTaskCreate(esploop1,                 /* Task function. */
+                "loop1",                  /* name of task. */
+                STACK_SIZE_SECOND_CORE,   /* Stack size of task */
+                NULL,                     /* parameter of the task */
+                PRIORITY_SECOND_CORE,     /* priority of the task */
+                &task_loop1               /* Task handle to keep track of created task */
+    );
+    // !ARDUINO_RUNNING_CORE); /* pin task to core 0 */
 #endif
     // ======= 696969 ========= END X DUAL CORE ESP32 STARTUP =================================
 
@@ -278,6 +281,7 @@ void setup() {
     // === 696969 === NEW USB INITIALIZATION OR WIRELESS CONNECTION MANAGEMENT =============================
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    HWCDCSerial.println("TinyUSBDevices.begin");
     TinyUSBDevices.begin(POLL_RATE);
         #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)  // IF WIRELESS
             #define MILLIS_TIMEOUT 1000                                       // 1 second
@@ -293,13 +297,14 @@ void setup() {
             #else
     {
             #endif
+        HWCDCSerial.println("SerialWireless.begin");
         SerialWireless.begin();  // do a sort of prebegin, without setting peer and other things
         if (lastDongleSave) {
             // TRY TO CONNECT TO THE PREVIOUS DONGLE BY SENDING THE CHECK_CONNECTION PACKET
             if (SerialWireless.connection_gun_at_last_dongle()) {
-            } else
+            } else {
                 SerialWireless.connection_gun();
-
+            }
         } else {
             // TinyUSBDevices.onBattery = false; // sets it to true only after connection between dongle and gun has
             // been established and recognized uint8_t wireless_state = 0;
@@ -344,8 +349,11 @@ void setup() {
     }
         #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
     else {
+        HWCDCSerial.println("else");
         if (!lastDongleSave || (lastDongleSave && !(memcmp(lastDongleAddress, peerAddress, 6) == 0)))
-            OF_Prefs::SaveLastDongleWireless(peerAddress);
+            HWCDCSerial.println("Saving last dongle wireless");
+        OF_Prefs::SaveLastDongleWireless(peerAddress);
+        HWCDCSerial.println("Saved last dongle wireless");
             // CLOSE EVERYTHING THAT IS USB IF IT NEEDS TO BE CLOSED
             #ifndef WIRELESS_ONLY
         TinyUSBDevice.clearConfiguration();
@@ -391,14 +399,22 @@ void setup() {
 
     // IR camera maxes out motion detection at ~300Hz, and millis() isn't good enough
 
+    HWCDCSerial.println("Starting IR camera timer");
+
     if (TinyUSBDevices.onBattery)
         startIrCamTimer(209);  // 120 ---- 100->10ms 66 -> 15ms for wireless connection
     else
         startIrCamTimer(209);  // 5ms for serial connection
 
+    HWCDCSerial.println("Starting OpenFIREper");
+
     FW_Common::OpenFIREper.source(OF_Prefs::profiles[OF_Prefs::currentProfile].adjX,
                                   OF_Prefs::profiles[OF_Prefs::currentProfile].adjY);
     FW_Common::OpenFIREper.deinit(0);
+
+    HWCDCSerial.println("Starting sanity checks");
+
+    Serial.write("Hello");
 
     // First boot sanity checks; all zeroes are initial config
     if ((OF_Prefs::profiles[OF_Prefs::currentProfile].topOffset == 0 &&
@@ -1182,7 +1198,9 @@ void ExecGunModeDocked() {
         buf[pos++] = OF_Const::serialTerminator;
         buf[pos++] = OF_Const::sError;
     }
+    HWCDCSerial.println("Writing to Serial");
     Serial.write(buf, pos);
+    HWCDCSerial.println("Flushing Serial");
     Serial.flush();
 
     for (;;) {

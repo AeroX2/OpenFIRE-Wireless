@@ -66,7 +66,7 @@ void processSerialCommand(char command) {
 }
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
     Serial.println("OpenFIRE Simple - Pedal Only - Starting up...");
 
     // Initialize pedal button pin
