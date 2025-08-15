@@ -16,7 +16,6 @@
 #include "OpenFIREprefs.h"
 #include "boards/OpenFIREshared.h"
 
-// ============ 696969 ========== redefinition of Serial to handle wireless serial connections ========
 #ifdef OPENFIRE_WIRELESS_ENABLE
 extern Stream *Serial_OpenFIRE_Stream;
     #ifdef Serial
@@ -25,7 +24,6 @@ extern Stream *Serial_OpenFIRE_Stream;
     #endif
     #define Serial (*Serial_OpenFIRE_Stream)
 #endif  // OPENFIRE_WIRELESS_ENABLE
-// ============ 696969 ===== end redefinition of Serial to handle wireless serial connections ========
 
 #ifdef MAMEHOOKER
 void OF_Serial::SerialProcessing() {
@@ -1016,8 +1014,7 @@ void OF_Serial::SerialHandling() {
 // Serial Buffer in Docked Mode should always be being read by the main core on multicore systems
 void OF_Serial::SerialProcessingDocked() {
     char c = Serial.read();
-    HWCDCSerial.println("Milad");
-    HWCDCSerial.println(c);
+    HWCDCSerial.printf("Received: %d\n", c);
     switch (c) {
         // Enter Docked Mode (in case running from first boot)
         case OF_Const::sDock1:
@@ -1159,7 +1156,8 @@ void OF_Serial::SerialProcessingDocked() {
 #endif  // LED_ENABLE
 
         case OF_Const::sCommitStart: {
-            if (Serial.available() == 1 && Serial.read() == true) {
+            Serial_available(1);
+            if (Serial.read() == 1) {
                 FW_Common::buttons.Unset();
                 bool exit = false;
                 size_t type, rxLen, datSize, profNum;
@@ -1203,7 +1201,12 @@ void OF_Serial::SerialProcessingDocked() {
                             //// Saving ops
                             case OF_Const::sCommitID:
                                 Serial_available(18);
-                                rxLen = Serial.readBytes(RXbuf, Serial.available());
+                                rxLen = Serial.readBytes(RXbuf, 18);
+                                // HWCDCSerial.printf("Received ID: ");
+                                // for (int i = 0; i < rxLen; i++) {
+                                //     HWCDCSerial.printf("%c ", RXbuf[i]);
+                                // }
+                                // HWCDCSerial.println();
                                 if (rxLen == 18)
                                     memcpy(&OF_Prefs::usb, RXbuf, rxLen);
                                 break;
@@ -1325,15 +1328,29 @@ void OF_Serial::SerialBatchSend(void *dataPtr, const std::unordered_map<std::str
             }
 
             for (int sendTry = 0; sendTry < 3; ++sendTry) {
+                // HWCDCSerial.println("Sending: ");
+                // for (int i = 0; i < pos; i++) {
+                //     HWCDCSerial.printf("%02X ", TXbuf[i]);
+                // }
+                // HWCDCSerial.println();
                 Serial.write(TXbuf, pos);
                 Serial.flush();
                 while (Serial.available() < pos)
                     yield();
                 Serial.readBytes(RXbuf, Serial.available());
-
-                if (!memcmp(RXbuf, TXbuf, pos))
+                // HWCDCSerial.println("Received: ");
+                // for (int i = 0; i < pos; i++) {
+                //     HWCDCSerial.printf("%02X ", RXbuf[i]);
+                // }
+                // HWCDCSerial.println();
+                if (!memcmp(RXbuf, TXbuf, pos)) {
+                    // HWCDCSerial.println("Match");
                     break;
+                } else {
+                    // HWCDCSerial.println("No match");
+                }
                 if (sendTry >= 2) {
+                    // HWCDCSerial.println("We failed");
                     Serial.write(OF_Const::sError);
                     Serial.flush();
                     return;
@@ -1365,10 +1382,10 @@ void OF_Serial::PrintResults() {
 
 #ifdef OPENFIRE_WIRELESS_ENABLE
     #ifdef WIRELESS_ONLY
-    if (!SerialWireless) {
+    if (!Serial_OpenFIRE_Stream) {
     #else
     if (!(TinyUSBDevices.onBattery
-              ? SerialWireless
+              ? Serial_OpenFIRE_Stream
               : TinyUSBDevice.mounted())) {  // 696969 then decide how to fix properly but this should work fine
     #endif
 #else
@@ -1571,13 +1588,3 @@ bool OF_Serial::Serial_available(uint8_t min) {
         return Serial.available() >= min ? true : false;
     }
 }
-
-// ============ 696969 ========== restore Serial after definition for serial connections ==============
-#ifdef OPENFIRE_WIRELESS_ENABLE
-    #undef Serial
-    #ifdef AUX_SERIAL
-        #define Serial AUX_SERIAL
-        #undef AuxSerial
-    #endif
-#endif  // OPENFIRE_WIRELESS_ENABLE
-        // ============ 696969 ===== end restore Serial after definition for serial connections ==============

@@ -46,14 +46,30 @@
 #ifndef _TINYUSB_DEVICES_H_
     #define _TINYUSB_DEVICES_H_
 
-    #include <Adafruit_TinyUSB.h>  // 696969 inserted for environment defines in particular connected to lighgunButtons.cpp
+    #include <Adafruit_TinyUSB.h>
     #include <Arduino.h>
 
-    #include "tusb_gamepad16.h"  // 696969 inserted for gamepad16
+    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+        #define PACKET_SERIAL 0x01
+        #define PACKET_SERIAL_WITH_SIZE 0x02
+        #define PACKET_MOUSE 0x03
+        #define PACKET_KEYBOARD 0x04
+        #define PACKET_GAMEPAD 0x05
+        #include <ESP32_NOW_Serial.h>
 
-    #if defined(OPENFIRE_WIRELESS_ENABLE) && defined(ARDUINO_ARCH_ESP32)
-        #include "OpenFIRE_Wireless.h"
-    #endif  // OPENFIRE_WIRELESS_ENABLE
+extern ESP_NOW_Serial_Class NowSerialDongle;
+    #endif
+
+    #include "tusb_gamepad16.h"
+
+enum WIRELESS_MODE {
+    NONE_WIRELESS = 0,
+    ENABLE_BLUETOOTH_TO_PC,         // 1
+    ENABLE_BLUETOOTH_TO_DONGLE,     // 2
+    ENABLE_ESP_NOW_TO_DONGLE,       // 3
+    ENABLE_WIFI_TO_DONGLE,          // 4
+    ENABLE_NRF_24L01PLUS_TO_DONGLE  // 5
+};
 
     /*****************************
      *   GLOBAL SECTION
@@ -80,8 +96,7 @@ class TinyUSBDevices_ {
     /// @brief Array of which of the three devices have new data that should be reported.
     bool newReport[3] = {false, false, false};
 
-    uint8_t wireless_mode = 0;  // 0 = no wireless connection, other value connection // must be different from zero -
-                                // moved to SerialWireless
+    uint8_t wirelessMode = 0;  // 0 = no wireless connection, other value connection
 };
 extern TinyUSBDevices_ TinyUSBDevices;
 

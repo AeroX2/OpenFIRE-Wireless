@@ -25,7 +25,7 @@
 #include "OpenFIREserial.h"
 #include "boards/OpenFIREshared.h"
 
-// =======696969===== DUAL CORE MANAGEMENT FOR ESP32 THAT USES FREERTOS ===  INITIALIZATION ========
+// ============ DUAL CORE MANAGEMENT FOR ESP32 THAT USES FREERTOS ==================
 #if defined(ARDUINO_ARCH_ESP32) && defined(DUAL_CORE)
 void setup1();
 void loop1();
@@ -36,13 +36,41 @@ void esploop1(void *pvParameters) {
         loop1();
 }
 #endif
-// ======696969============= END DUAL CORE ESP32 MANAGEMENT ==== END INITIALIZATION ============
+// =================== END DUAL CORE ESP32 MANAGEMENT ===============
+
+#if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
+    #include <ESP32_NOW_Serial.h>
+    #include <MacAddress.h>
+    #include <WiFi.h>
+    // #include "ESP_NOW_Serial_Wrapper.h"
+
+    // Packet type identifiers
+    #define PACKET_SERIAL 0x01
+
+    // Channel to be used by the ESP-NOW protocol
+    #define ESPNOW_WIFI_CHANNEL 1
+
+    // WiFi interface configuration
+    #define ESPNOW_WIFI_MODE_STATION 1
+    #if ESPNOW_WIFI_MODE_STATION
+        #define ESPNOW_WIFI_MODE WIFI_STA
+        #define ESPNOW_WIFI_IF WIFI_IF_STA
+    #else
+        #define ESPNOW_WIFI_MODE WIFI_AP
+        #define ESPNOW_WIFI_IF WIFI_IF_AP
+    #endif
+
+// Dongle: 30:ED:A0:06:5E:74
+const MacAddress dongle_peer_mac({0x30, 0xED, 0xA0, 0x06, 0x5E, 0x74});
+
+ESP_NOW_Serial_Class NowSerialDongle(dongle_peer_mac, ESPNOW_WIFI_CHANNEL, ESPNOW_WIFI_IF);
+#endif
 
 // Sets up the environment
 void setup() {
     HWCDCSerial.begin(9600);
 
-// ======== 696969 =========== X DUAL CORE ESP32 STARTUP ===================================
+// ============ DUAL CORE ESP32 STARTUP ===================================
 #if defined(ARDUINO_ARCH_ESP32) && defined(DUAL_CORE)
     #define STACK_SIZE_SECOND_CORE 10000  // enough 4096 ???
     #define PRIORITY_SECOND_CORE 0        // should be 1 ???
@@ -55,7 +83,7 @@ void setup() {
     );
     // !ARDUINO_RUNNING_CORE); /* pin task to core 0 */
 #endif
-    // ======= 696969 ========= END X DUAL CORE ESP32 STARTUP =================================
+    // ========= END DUAL CORE ESP32 STARTUP =================================
 
     // In case some I2C devices deadlock the program
     // (can happen due to bad pin mappings)
@@ -110,38 +138,8 @@ void setup() {
 
         OF_Prefs::Load();
 
-#if defined(OPENFIRE_WIRELESS_ENABLE) && defined(ARDUINO_ARCH_ESP32)
-        uint8_t aux_espnow_wifi_channel, aux_espnow_wifi_power;
-        if (OF_Prefs::LoadWireless(&aux_espnow_wifi_channel, &aux_espnow_wifi_power) == OF_Prefs::Error_Success) {
-            espnow_wifi_channel = aux_espnow_wifi_channel;
-            espnow_wifi_power = aux_espnow_wifi_power;
-        }
-        /*
-        else {
-            OF_Prefs::SaveWireless(&espnow_wifi_channel, &espnow_wifi_power)
-        }
-        */
-        if (OF_Prefs::LoadLastDongleWireless(lastDongleAddress) == OF_Prefs::Error_Success)
-            lastDongleSave = true;
-        else
-            lastDongleSave = false;
-
-#endif  // defined(OPENFIRE_WIRELESS_ENABLE) && defined(ARDUINO_ARCH_ESP32)
-
     } else
         Serial.printf("%c%c (No Storage Available)", OF_Const::sError, (char)OF_Prefs::Error_NoStorage);
-
-// ===== 696969 to transmit wireless data to the dongle ========
-#if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-    strncpy(usb_data_wireless.deviceManufacturer, MANUFACTURER_NAME, sizeof(usb_data_wireless.deviceManufacturer));
-    strncpy(usb_data_wireless.deviceName, DEVICE_NAME, sizeof(usb_data_wireless.deviceName));  // changes
-    usb_data_wireless.deviceVID = DEVICE_VID;
-    usb_data_wireless.devicePID = PLAYER_NUMBER;  // changes
-    usb_data_wireless.devicePlayer = PLAYER_NUMBER;
-    usb_data_wireless.channel = espnow_wifi_channel;
-    usb_data_wireless.deviceType = 'G';  // Gun device type
-#endif                                   // defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-// ===============================================================
 
 // We're setting our custom USB identifiers, as defined in the configuration area!
 #if defined(USE_TINYUSB) && !defined(WIRELESS_ONLY)
@@ -281,86 +279,18 @@ void setup() {
     // === 696969 === NEW USB INITIALIZATION OR WIRELESS CONNECTION MANAGEMENT =============================
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    HWCDCSerial.println("TinyUSBDevices.begin");
     TinyUSBDevices.begin(POLL_RATE);
-        #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)  // IF WIRELESS
-            #define MILLIS_TIMEOUT 1000                                       // 1 second
-            #ifndef WIRELESS_ONLY
-    unsigned long lastMillis = millis();
-    while ((millis() - lastMillis <= MILLIS_TIMEOUT) && (!TinyUSBDevice.mounted())) {
-        yield();
-    }
-            #endif
 
-            #ifndef WIRELESS_ONLY
-    if (!TinyUSBDevice.mounted()) {
-            #else
-    {
-            #endif
-        HWCDCSerial.println("SerialWireless.begin");
-        SerialWireless.begin();  // do a sort of prebegin, without setting peer and other things
-        if (lastDongleSave) {
-            // TRY TO CONNECT TO THE PREVIOUS DONGLE BY SENDING THE CHECK_CONNECTION PACKET
-            if (SerialWireless.connection_gun_at_last_dongle()) {
-            } else {
-                SerialWireless.connection_gun();
-            }
-        } else {
-            // TinyUSBDevices.onBattery = false; // sets it to true only after connection between dongle and gun has
-            // been established and recognized uint8_t wireless_state = 0;
-            SerialWireless.connection_gun();
-        }
-    }
-        #endif  // OPENFIRE_WIRELESS_ENABLE
-
-        #ifndef WIRELESS_ONLY
-    while (!TinyUSBDevice.mounted() && !TinyUSBDevices.onBattery) {
-        yield();
-    }
-        #endif
-
-        // arrives here only if USB has been connected or a wireless connection has been negotiated and established
-
-        #ifndef WIRELESS_ONLY
-    if (TinyUSBDevice.mounted()) {
-        #else
-    if (false) {
-        #endif
-        Serial.begin(9600);
-        Serial.setTimeout(0);
-        #if defined(ARDUINO_ARCH_ESP32)
-        Serial.setTxTimeoutMs(0);  // default is 250ms // serves to do like in arduino pico rp2040
-                                   // Serial.setRxBufferSize(64); // set with for arduino pico .. if not set it's 256 by
-                                   // default Serial.setRxBufferSize(usbPackageSize + 128); Serial.setTxBufferSize(64);
-        #endif  // ARDUINO_ARCH_ESP32
         #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-        if (TinyUSBDevices.onBattery) {  // in the incredible case that USB is mounted at the exact moment when wireless
-                                         // connection has been established
-            TinyUSBDevices.onBattery = false;
-            // SerialWireless.end();
-        }
-        if (TinyUSBDevices.wireless_mode != WIRELESS_MODE::NONE_WIRELESS)
-            SerialWireless.end();
-        #endif
-        Serial_OpenFIRE_Stream = &Serial;
-        // Serial_OpenFIRE_Stream->setTimeout(0);
-        //(*Serial_OpenFIRE_Stream).setTimeout(0);
+    WiFi.mode(ESPNOW_WIFI_MODE);
+    WiFi.setChannel(ESPNOW_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
 
+    while (!(WiFi.STA.started() || WiFi.AP.started())) {
+        delay(100);
     }
-        #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-    else {
-        HWCDCSerial.println("else");
-        if (!lastDongleSave || (lastDongleSave && !(memcmp(lastDongleAddress, peerAddress, 6) == 0)))
-            HWCDCSerial.println("Saving last dongle wireless");
-        OF_Prefs::SaveLastDongleWireless(peerAddress);
-        HWCDCSerial.println("Saved last dongle wireless");
-            // CLOSE EVERYTHING THAT IS USB IF IT NEEDS TO BE CLOSED
-            #ifndef WIRELESS_ONLY
-        TinyUSBDevice.clearConfiguration();
-        TinyUSBDevice.detach();
-            #endif
-        Serial_OpenFIRE_Stream = &SerialWireless;
-    }
+
+    NowSerialDongle.begin(115200);
+
         #endif
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -383,9 +313,115 @@ void setup() {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef OPENFIRE_WIRELESS_ENABLE
-    // extern Stream* Serial_OpenFIRE_Stream;
+    // Create a wrapper class that prepends PACKET_SERIAL to all serial communications
+    class NowSerialWrapper : public Stream {
+       private:
+        ESP_NOW_Serial_Class &serial;
+
+       public:
+        NowSerialWrapper(ESP_NOW_Serial_Class &s) : serial(s) {}
+
+        // Override only the write methods - all print/println methods inherit from Print class
+        // and will automatically use our write methods, prepending PACKET_SERIAL
+        virtual size_t write(uint8_t data) override {
+            // HWCDCSerial.println("Writing: ");
+            // HWCDCSerial.printf("%02X ", data);
+            // HWCDCSerial.println();
+            serial.write(PACKET_SERIAL);
+            return serial.write(data);
+        }
+
+        virtual size_t write(const uint8_t *buffer, size_t size) override {
+            // HWCDCSerial.println("Writing with size: ");
+            // for (int i = 0; i < size; i++) {
+            //     HWCDCSerial.printf("%02X ", buffer[i]);
+            // }
+            // HWCDCSerial.println();
+            serial.write(PACKET_SERIAL_WITH_SIZE);
+            serial.write(size);
+            return serial.write(buffer, size);
+        }
+
+        virtual int read() override {
+            int c = serial.read();
+            if (c != PACKET_SERIAL) {
+                return -1;
+            }
+            while (!serial.available()) {
+                delay(1);
+            }
+            c = serial.read();
+            return c;
+        }
+
+        virtual size_t readBytes(char *buffer, size_t length) override {
+            for (int i = 0; i < length; i++) {
+                buffer[i] = read();
+            }
+            return length;
+        }
+
+        virtual size_t readBytes(uint8_t *buffer, size_t size) override {
+            for (int i = 0; i < size; i++) {
+                buffer[i] = read();
+            }
+            return size;
+        }
+
+        virtual size_t readBytesUntil(char terminator, char *buffer, size_t size) {
+            for (int i = 0; i < size; i++) {
+                int c = read();
+                if (c == terminator) {
+                    buffer[i] = c;
+                    return i + 1;
+                }
+                buffer[i] = c;
+            }
+            return size;
+        }
+
+        virtual size_t readBytesUntil(char terminator, uint8_t *buffer, size_t size) {
+            for (int i = 0; i < size; i++) {
+                int c = read();
+                if (c == terminator) {
+                    buffer[i] = c;
+                    return i + 1;
+                }
+                buffer[i] = c;
+            }
+            return size;
+        }
+
+        // Delegate other methods directly
+        int available() {
+            return serial.available();
+        }
+        int peek() {
+            return serial.peek();
+        }
+        void flush() {
+            serial.flush();
+        }
+        void begin(unsigned long baud) {
+            serial.begin(baud);
+        }
+        void end() {
+            serial.end();
+        }
+        void setTimeout(unsigned long timeout) {
+            serial.setTimeout(timeout);
+        }
+        int availableForWrite() {
+            return serial.availableForWrite();
+        }
+    };
+
+    // Create the wrapper instance
+    NowSerialWrapper NowSerialWrapperInstance(NowSerialDongle);
+    Serial_OpenFIRE_Stream = &NowSerialWrapperInstance;
+
     #ifdef Serial
-        // #define AUX_SERIAL Serial
+        #define AUX_SERIAL Serial
         #undef Serial
     #endif
     #define Serial (*Serial_OpenFIRE_Stream)
@@ -399,22 +435,16 @@ void setup() {
 
     // IR camera maxes out motion detection at ~300Hz, and millis() isn't good enough
 
-    HWCDCSerial.println("Starting IR camera timer");
-
     if (TinyUSBDevices.onBattery)
         startIrCamTimer(209);  // 120 ---- 100->10ms 66 -> 15ms for wireless connection
     else
         startIrCamTimer(209);  // 5ms for serial connection
 
-    HWCDCSerial.println("Starting OpenFIREper");
+    HWCDCSerial.println("Starting OpenFIRE");
 
     FW_Common::OpenFIREper.source(OF_Prefs::profiles[OF_Prefs::currentProfile].adjX,
                                   OF_Prefs::profiles[OF_Prefs::currentProfile].adjY);
     FW_Common::OpenFIREper.deinit(0);
-
-    HWCDCSerial.println("Starting sanity checks");
-
-    Serial.write("Hello");
 
     // First boot sanity checks; all zeroes are initial config
     if ((OF_Prefs::profiles[OF_Prefs::currentProfile].topOffset == 0 &&
@@ -1190,7 +1220,7 @@ void ExecGunModeDocked() {
 #endif  // GIT_HASH
     );
     buf[pos++] = OF_Const::serialTerminator;
-    pos += sprintf(&buf[pos], "%s", OPENFIRE_BOARD);
+    pos += sprintf(&buf[pos], "%s", "esp32-s3");
     buf[pos++] = OF_Const::serialTerminator;
     memcpy(&buf[pos], &OF_Prefs::usb, sizeof(OF_Prefs::USBMap_t));
     pos += sizeof(OF_Prefs::USBMap_t);
@@ -1198,9 +1228,7 @@ void ExecGunModeDocked() {
         buf[pos++] = OF_Const::serialTerminator;
         buf[pos++] = OF_Const::sError;
     }
-    HWCDCSerial.println("Writing to Serial");
     Serial.write(buf, pos);
-    HWCDCSerial.println("Flushing Serial");
     Serial.flush();
 
     for (;;) {

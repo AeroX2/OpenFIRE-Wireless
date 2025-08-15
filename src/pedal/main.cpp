@@ -1,19 +1,34 @@
 #include <Arduino.h>
+#include <ESP32_NOW_Serial.h>
+#include <MacAddress.h>
 #include <WiFi.h>
 
-#include "OpenFIRE_Packet.h"
-#include "OpenFIRE_Wireless.h"
 #include "TinyUSB_Devices.h"
 
 // Button configuration - only pedal
 #define PEDAL_PIN 20  // D9 for SeeedStudio ESP32-C6
 
+// Channel to be used by the ESP-NOW protocol
+#define ESPNOW_WIFI_CHANNEL 1
+
+// WiFi interface configuration
+#define ESPNOW_WIFI_MODE_STATION 1
+#if ESPNOW_WIFI_MODE_STATION
+    #define ESPNOW_WIFI_MODE WIFI_STA
+    #define ESPNOW_WIFI_IF WIFI_IF_STA
+#else
+    #define ESPNOW_WIFI_MODE WIFI_AP
+    #define ESPNOW_WIFI_IF WIFI_IF_AP
+#endif
+
+// Dongle: 30:ED:A0:06:5E:74
+const MacAddress dongle_peer_mac({0x30, 0xED, 0xA0, 0x06, 0x5E, 0x74});
+
+ESP_NOW_Serial_Class NowSerialDongle(dongle_peer_mac, ESPNOW_WIFI_CHANNEL, ESPNOW_WIFI_IF);
+
 // Pedal state tracking
 bool pedalPressed = false;
 bool lastPedalPressed = false;
-
-// Connection state tracking
-bool wasConnected = false;
 
 // Pedal mode enum
 enum class PedalMode : uint8_t {
@@ -31,6 +46,7 @@ uint8_t lastButtonState = 0;
 
 // Process serial commands (simplified version - only pedal functionality)
 void processSerialCommand(char command) {
+    Serial.printf("Received command: %c\n", command);
     switch (command) {
         case 'S':  // Start signal
             Serial.println("SERIALREAD: Start command received");
@@ -38,13 +54,13 @@ void processSerialCommand(char command) {
 
         case 'M':  // Mode setting
         {
-            char subCommand = Serial.read();
-            char subSubCommand = Serial.read();
+            char subCommand = NowSerialDongle.read();
+            char subSubCommand = NowSerialDongle.read();
 
             switch (subCommand) {
                 case '2':  // Pedal functionality
                 {
-                    char pedalSubCommand = Serial.read();
+                    char pedalSubCommand = NowSerialDongle.read();
                     switch (pedalSubCommand) {
                         case '0':  // Separate button
                             pedalMode = PedalMode::SEPARATE;
@@ -73,32 +89,29 @@ void setup() {
     pinMode(PEDAL_PIN, INPUT_PULLUP);
     Serial.println("Pedal button initialized");
 
-    // Initialize wireless
-    SerialWireless.begin();
-    Serial.println("Wireless initialized");
+    WiFi.mode(ESPNOW_WIFI_MODE);
+    WiFi.setChannel(ESPNOW_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
 
-// Set up USB data for wireless communication
-#if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-    strncpy(usb_data_wireless.deviceManufacturer, "OpenFIRE", sizeof(usb_data_wireless.deviceManufacturer));
-    strncpy(usb_data_wireless.deviceName, "Pedal", sizeof(usb_data_wireless.deviceName));
-    usb_data_wireless.deviceVID = 0x1234;  // Example VID
-    usb_data_wireless.devicePID = PLAYER_NUMBER;
-    usb_data_wireless.devicePlayer = PLAYER_NUMBER;
-    usb_data_wireless.channel = espnow_wifi_channel;
-    usb_data_wireless.deviceType = 'P';  // Pedal device type
-#endif
+    while (!(WiFi.STA.started() || WiFi.AP.started())) {
+        delay(100);
+    }
 
-    // Try to connect
-    SerialWireless.connection_gun();
+    TinyUSBDevices.begin(-1);
+    NowSerialDongle.begin(115200);
 
     Serial.println("Setup complete!");
 }
 
 void loop() {
     // Check for serial commands
-    if (Serial.available()) {
-        char command = Serial.read();
-        processSerialCommand(command);
+    if (NowSerialDongle.available()) {
+        char s = NowSerialDongle.read();
+        if (s == 0x01) {  // TODO: make this a constant, also support SERIAL_WITH_SIZE
+            char command = NowSerialDongle.read();
+            processSerialCommand(command);
+        } else {
+            Serial.printf("Received packet type: %d\n", s);
+        }
     }
 
     // Read pedal button state
@@ -137,15 +150,6 @@ void loop() {
     }
 
     lastPedalPressed = pedalPressed;
-
-    // Print connection status changes
-    if (SerialWireless.wireless_connection_state == DEVICES_CONNECTED && !wasConnected) {
-        wasConnected = true;
-        Serial.println("*** CONNECTED ***");
-    } else if (SerialWireless.wireless_connection_state != DEVICES_CONNECTED && wasConnected) {
-        wasConnected = false;
-        Serial.println("*** DISCONNECTED ***");
-    }
 
     // Small delay to prevent overwhelming the system
     delay(10);

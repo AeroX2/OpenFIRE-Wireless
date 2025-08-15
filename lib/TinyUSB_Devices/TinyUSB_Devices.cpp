@@ -22,29 +22,15 @@
  *   GLOBAL SECTION
  *****************************/
 #ifndef WIRELESS_ONLY
-Adafruit_USBD_HID usbHid;
+extern Adafruit_USBD_HID usbHid;
 #endif
 
-#ifdef COMMENT
-/* // 696969 moved to TinyUSB_Devices */
-enum HID_RID_e {
-    HID_RID_KEYBOARD = 1,
-    HID_RID_MOUSE,   // 2
-    HID_RID_GAMEPAD  // 3
-};
-
-uint8_t const desc_hid_report[] = {TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(HID_RID_e::HID_RID_KEYBOARD)),
-                                   TUD_HID_REPORT_DESC_ABSMOUSE(HID_REPORT_ID(HID_RID_e::HID_RID_MOUSE)),
-                                   TUD_HID_REPORT_DESC_GAMEPAD16(HID_REPORT_ID(HID_RID_e::HID_RID_GAMEPAD))};
-*/
-#endif  // COMMENT
-
 #if defined(PIO_FRAMEWORK_ARDUINO_ENABLE_BLUETOOTH) && defined(ARDUINO_RASPBERRY_PI_PICO_W) && defined(ENABLE_CLASSIC)
-    enum HID_BT_e {
-        HID_BT_KEYBOARD = 1,
-        HID_BT_MOUSE,   // 2
-        HID_BT_GAMEPAD  // 3
-    };
+enum HID_BT_e {
+    HID_BT_KEYBOARD = 1,
+    HID_BT_MOUSE,   // 2
+    HID_BT_GAMEPAD  // 3
+};
 
 uint8_t desc_bt_report[] = {TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(HID_BT_e::HID_BT_KEYBOARD)),
                             TUD_HID_REPORT_DESC_ABSMOUSE(HID_REPORT_ID(HID_BT_e::HID_BT_MOUSE)),
@@ -52,12 +38,13 @@ uint8_t desc_bt_report[] = {TUD_HID_REPORT_DESC_KEYBOARD(HID_REPORT_ID(HID_BT_e:
 #endif  // ARDUINO_RASPBERRY_PI_PICO_W
 
 void TinyUSBDevices_::begin(int polRate) {
+#ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+    wirelessMode = ENABLE_ESP_NOW_TO_DONGLE;
+#endif
 #ifndef WIRELESS_ONLY
     usbHid.setPollInterval(polRate);
     usbHid.setReportDescriptor(desc_hid_report, sizeof(desc_hid_report));
     usbHid.begin();
-    // 696969 added by me: If already enumerated, additional class driver begin() (e.g. msc, hid, midi) won't take
-    // effect until re-enumeration
     if (TinyUSBDevice.mounted()) {
         TinyUSBDevice.detach();
         delay(10);
@@ -98,26 +85,20 @@ void AbsMouse5_::report(void) {
     }
 #ifdef OPENFIRE_WIRELESS_ENABLE
     else {
-        switch (TinyUSBDevices.wireless_mode) {
+        switch (TinyUSBDevices.wirelessMode) {
     #if defined(ENABLE_BLUETOOTH_OPENFIRE)
             case ENABLE_BLUETOOTH_TO_PC:
                 BT_OpenFIRE.send(HID_BT_MOUSE, &absmouse5Report, sizeof(absmouse5Report));
             case ENABLE_BLUETOOTH_TO_DONGLE:
-                /* code */
                 break;
     #endif  // ENABLE_BLUETOOTH_OPENFIRE
-    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+    #if defined(OPENFIRE_WIRELESS_DEVICE_ESPNOW) && !defined(DONGLE)
             case ENABLE_ESP_NOW_TO_DONGLE:
-                SerialWireless.SendPacket((const uint8_t *)&absmouse5Report, sizeof(absmouse5Report),
-                                          PACKET_TX::MOUSE_TX);
+                NowSerialDongle.write(PACKET_MOUSE);
+                NowSerialDongle.write((const uint8_t *)&absmouse5Report, sizeof(absmouse5Report));
+                NowSerialDongle.flush();
                 break;
     #endif  // OPENFIRE_WIRELESS_DEVICE_ESPNOW
-            case ENABLE_WIFI_TO_DONGLE:
-                /* code */
-                break;
-            case ENABLE_NRF_24L01PLUS_TO_DONGLE:
-                /* code */
-                break;
             default:
                 break;
         }
@@ -139,7 +120,6 @@ void AbsMouse5_::move(int16_t x, int16_t y) {
         absmouse5Report.x = x;
         absmouse5Report.y = y;
         TinyUSBDevices.newReport[TinyUSBDevices_::reportMouse] = true;
-        // report();
     }
 }
 
@@ -147,7 +127,6 @@ void AbsMouse5_::press(uint8_t button) {
     if (!(absmouse5Report.buttons & button)) {
         absmouse5Report.buttons |= button;
         TinyUSBDevices.newReport[TinyUSBDevices_::reportMouse] = true;
-        // report();
     }
 }
 
@@ -155,7 +134,6 @@ void AbsMouse5_::release(uint8_t button) {
     if (absmouse5Report.buttons & button) {
         absmouse5Report.buttons &= ~button;
         TinyUSBDevices.newReport[TinyUSBDevices_::reportMouse] = true;
-        // report();
     }
 }
 
@@ -201,26 +179,21 @@ void Keyboard_::report(void) {
     }
 #ifdef OPENFIRE_WIRELESS_ENABLE
     else {
-        switch (TinyUSBDevices.wireless_mode) {
+        switch (TinyUSBDevices.wirelessMode) {
     #if defined(ENABLE_BLUETOOTH_OPENFIRE)
             case ENABLE_BLUETOOTH_TO_PC:
                 BT_OpenFIRE.send(HID_BT_KEYBOARD, &_keyReport, sizeof(_keyReport));
                 break;
             case ENABLE_BLUETOOTH_TO_DONGLE:
-                /* code */
                 break;
     #endif  // ENABLE_BLUETOOTH_OPENFIRE
-    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+    #if defined(OPENFIRE_WIRELESS_DEVICE_ESPNOW) && !defined(DONGLE)
             case ENABLE_ESP_NOW_TO_DONGLE:
-                SerialWireless.SendPacket((const uint8_t *)&_keyReport, sizeof(_keyReport), PACKET_TX::KEYBOARD_TX);
+                NowSerialDongle.write(PACKET_KEYBOARD);
+                NowSerialDongle.write((const uint8_t *)&_keyReport, sizeof(_keyReport));
+                NowSerialDongle.flush();
                 break;
     #endif  // OPENFIRE_WIRELESS_DEVICE_ESPNOW
-            case ENABLE_WIFI_TO_DONGLE:
-                /* code */
-                break;
-            case ENABLE_NRF_24L01PLUS_TO_DONGLE:
-                /* code */
-                break;
             default:
                 break;
         }
@@ -280,7 +253,6 @@ size_t Keyboard_::press(uint8_t k) {
         return 0;
     }
     TinyUSBDevices.newReport[TinyUSBDevices_::reportKeyboard] = true;
-    // report();
     return 1;
 }
 
@@ -323,7 +295,6 @@ size_t Keyboard_::release(uint8_t k) {
         }
     }
     TinyUSBDevices.newReport[TinyUSBDevices_::reportKeyboard] = true;
-    // report();
     return 1;
 }
 
@@ -331,7 +302,6 @@ void Keyboard_::releaseAll(void) {
     tu_memclr(&_keyReport.keycode, 6);
     _keyReport.modifier = 0;
     TinyUSBDevices.newReport[TinyUSBDevices_::reportKeyboard] = true;
-    // report();
 }
 
 size_t Keyboard_::write(uint8_t c) {
@@ -372,7 +342,6 @@ void Gamepad16_::moveCam(uint16_t origX, uint16_t origY) {
         gamepad16Report.ry = map(origY, 0, 32767, -32767, 32767);
     }
     TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-    // report();
 }
 
 void Gamepad16_::moveStick(uint16_t origX, uint16_t origY) {
@@ -387,7 +356,6 @@ void Gamepad16_::moveStick(uint16_t origX, uint16_t origY) {
             gamepad16Report.x = map(_y, 0, 4095, 32767, -32767);
         }
         TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-        // report();
     }
 }
 
@@ -395,7 +363,6 @@ void Gamepad16_::press(uint8_t buttonNum) {
     if (!(gamepad16Report.buttons & (1 << buttonNum))) {
         bitSet(gamepad16Report.buttons, buttonNum);
         TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-        // report();
     }
 }
 
@@ -403,7 +370,6 @@ void Gamepad16_::release(uint8_t buttonNum) {
     if (gamepad16Report.buttons & (1 << buttonNum)) {
         bitClear(gamepad16Report.buttons, buttonNum);
         TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-        // report();
     }
 }
 
@@ -411,7 +377,6 @@ void Gamepad16_::padUpdate(uint8_t padMask) {
     if (gamepad16Report.hat != padMask) {
         gamepad16Report.hat = padMask;
         TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-        // report();
     }
 }
 
@@ -428,27 +393,21 @@ void Gamepad16_::report() {
     }
 #ifdef OPENFIRE_WIRELESS_ENABLE
     else {
-        switch (TinyUSBDevices.wireless_mode) {
+        switch (TinyUSBDevices.wirelessMode) {
     #if defined(ENABLE_BLUETOOTH_OPENFIRE)
             case ENABLE_BLUETOOTH_TO_PC:
                 BT_OpenFIRE.send(HID_BT_GAMEPAD, &gamepad16Report, sizeof(gamepad16Report));
                 break;
             case ENABLE_BLUETOOTH_TO_DONGLE:
-                /* code */
                 break;
     #endif  // ENABLE_BLUETOOTH_OPENFIRE
-    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+    #if defined(OPENFIRE_WIRELESS_DEVICE_ESPNOW) && !defined(DONGLE)
             case ENABLE_ESP_NOW_TO_DONGLE:
-                SerialWireless.SendPacket((const uint8_t *)&gamepad16Report, sizeof(gamepad16Report),
-                                          PACKET_TX::GAMEPAD_TX);
+                NowSerialDongle.write(PACKET_GAMEPAD);
+                NowSerialDongle.write((const uint8_t *)&gamepad16Report, sizeof(gamepad16Report));
+                NowSerialDongle.flush();
                 break;
     #endif  // OPENFIRE_WIRELESS_DEVICE_ESPNOW
-            case ENABLE_WIFI_TO_DONGLE:
-                /* code */
-                break;
-            case ENABLE_NRF_24L01PLUS_TO_DONGLE:
-                /* code */
-                break;
             default:
                 break;
         }
@@ -461,7 +420,6 @@ void Gamepad16_::releaseAll() {
     tu_memclr(&gamepad16Report, sizeof(gamepad16Report));
     _x = 2048, _y = 2048;
     TinyUSBDevices.newReport[TinyUSBDevices_::reportGamepad] = true;
-    // report();
 }
 
 Gamepad16_ Gamepad16;
