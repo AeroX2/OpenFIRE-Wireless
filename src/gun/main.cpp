@@ -69,6 +69,7 @@ ESP_NOW_Serial_Class NowSerialDongle(dongle_peer_mac, ESPNOW_WIFI_CHANNEL, ESPNO
 // Sets up the environment
 void setup() {
     HWCDCSerial.begin(9600);
+    delay(3000);
 
 // ============ DUAL CORE ESP32 STARTUP ===================================
 #if defined(ARDUINO_ARCH_ESP32) && defined(DUAL_CORE)
@@ -143,27 +144,15 @@ void setup() {
 
 // We're setting our custom USB identifiers, as defined in the configuration area!
 #if defined(USE_TINYUSB) && !defined(WIRELESS_ONLY)
-    // Initializes TinyUSB identifier
-    if (!TinyUSBDevice.isInitialized()) {  // 696969 added ..it worked the same, but this is safer ..
-                                           // definitely needed for Esp32 with library not integrated in the core
-        TinyUSBDevice.begin(0);
-    }
     // Values are pulled from EEPROM values that were loaded earlier in setup()
     TinyUSBDevice.setManufacturerDescriptor(MANUFACTURER_NAME);
 
     if (OF_Prefs::usb.devicePID) {
         TinyUSBDevice.setID(DEVICE_VID, OF_Prefs::usb.devicePID);
-    #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-        usb_data_wireless.devicePID = OF_Prefs::usb.devicePID;
-        usb_data_wireless.devicePlayer = OF_Prefs::usb.devicePID;
-    #endif  // defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
         if (OF_Prefs::usb.deviceName[0] == '\0')
             TinyUSBDevice.setProductDescriptor(DEVICE_NAME);
         else {
             TinyUSBDevice.setProductDescriptor(OF_Prefs::usb.deviceName);
-    #if defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
-            strncpy(usb_data_wireless.deviceName, OF_Prefs::usb.deviceName, sizeof(usb_data_wireless.deviceName));
-    #endif  // defined(ARDUINO_ARCH_ESP32) && defined(OPENFIRE_WIRELESS_ENABLE)
         }
     } else {
         TinyUSBDevice.setProductDescriptor(DEVICE_NAME);
@@ -206,40 +195,6 @@ void setup() {
     #endif  // USES_DISPLAY
 #endif      // ARDUINO_ARCH_ESP32
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// 696969 == CODE TO CALIBRATE STICK LEVER IN CENTER POSITION =============
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#if defined(ARDUINO_ARCH_ESP32) && \
-    defined(USES_ANALOG)  // we only do it for ESP32 and leave RP2040 as original management
-    uint16_t analogValueX;
-    uint16_t analogValueY;
-    // unsigned long startTime = 0;
-    unsigned long startTime = millis();
-    while ((millis() - startTime) < 2000) {
-        analogValueX = analogRead(OF_Prefs::pins[OF_Const::analogX]);
-        analogValueY = analogRead(OF_Prefs::pins[OF_Const::analogY]);
-        if (analogValueX > ANALOG_STICK_DEADZONE_X_MAX)
-            ANALOG_STICK_DEADZONE_X_MAX = analogValueX;
-        if (analogValueX < ANALOG_STICK_DEADZONE_X_MIN)
-            ANALOG_STICK_DEADZONE_X_MIN = analogValueX;
-        if (analogValueY > ANALOG_STICK_DEADZONE_Y_MAX)
-            ANALOG_STICK_DEADZONE_Y_MAX = analogValueY;
-        if (analogValueY < ANALOG_STICK_DEADZONE_Y_MIN)
-            ANALOG_STICK_DEADZONE_Y_MIN = analogValueY;
-    }
-
-    ANALOG_STICK_DEADZONE_X_CENTER = (ANALOG_STICK_DEADZONE_X_MIN + ANALOG_STICK_DEADZONE_X_MAX) / 2;
-    ANALOG_STICK_DEADZONE_Y_CENTER = (ANALOG_STICK_DEADZONE_Y_MIN + ANALOG_STICK_DEADZONE_Y_MAX) / 2;
-
-    ANALOG_STICK_DEADZONE_X_MIN -= 400;
-    ANALOG_STICK_DEADZONE_X_MAX += 400;
-    ANALOG_STICK_DEADZONE_Y_MIN -= 400;
-    ANALOG_STICK_DEADZONE_Y_MAX += 400;
-#endif
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // 696969 == END STICK CALIBRATION CODE ========================================
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     // ===================================================================================================================
 
 #ifdef USE_TINYUSB
@@ -247,15 +202,14 @@ void setup() {
     // is VBUS (USB voltage) detected?
     if (digitalRead(34) || true) {  // digitalRead(34) doesn't work and it's not the correct method
         // If so, we're connected via USB, so initializing the USB devices chunk.
-        TinyUSBDevices.begin(POLL_RATE);  // 696969 inserted this instead of the one below
-        // TUSBDeviceSetup.begin(1); // 696969 removed, complete transition not yet done
+        TinyUSBDevices.begin(POLL_RATE);
         // wait until device mounted
         while (!USBDevice.mounted()) {
             yield();
         }
         Serial.begin(9600);
         Serial.setTimeout(0);
-        Serial_OpenFIRE_Stream = &Serial;  // 696969 inserted by me
+        Serial_OpenFIRE_Stream = &Serial;
     } else {
         // Else, we're on batt, so init the Bluetooth chunks.
         if (OF_Prefs::usb.deviceName[0] == '\0')
@@ -263,7 +217,7 @@ void setup() {
         else
             TinyUSBDevices.beginBT(OF_Prefs::usb.deviceName, OF_Prefs::usb.deviceName);
     }
-    #elif defined(ARDUINO_ARCH_RP2040)  // 696969 put to maintain old code
+    #elif defined(ARDUINO_ARCH_RP2040)
     // Initializing the USB devices chunk.
     TinyUSBDevices.begin(POLL_RATE);
     // wait until device mounted
@@ -272,8 +226,7 @@ void setup() {
     }
     Serial.begin(9600);  // 9600 = 1ms data transfer rates, default for MAMEHOOKER COM devices.
     Serial.setTimeout(0);
-    Serial_OpenFIRE_Stream = &Serial;  // 696969 inserted by me
-    #else                               // 696969 inserted by me // ARDUINO_ARCH_ESP32
+    #else
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // === 696969 === NEW USB INITIALIZATION OR WIRELESS CONNECTION MANAGEMENT =============================
@@ -427,20 +380,12 @@ void setup() {
     #define Serial (*Serial_OpenFIRE_Stream)
 #endif  // OPENFIRE_WIRELESS_ENABLE
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////////// 696969 ////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    /////////////////// AbsMouse5.init(true); // 696969 removed for my new OpenFire_TinyDevice
-
     // IR camera maxes out motion detection at ~300Hz, and millis() isn't good enough
 
     if (TinyUSBDevices.onBattery)
         startIrCamTimer(209);  // 120 ---- 100->10ms 66 -> 15ms for wireless connection
     else
         startIrCamTimer(209);  // 5ms for serial connection
-
-    HWCDCSerial.println("Starting OpenFIRE");
 
     FW_Common::OpenFIREper.source(OF_Prefs::profiles[OF_Prefs::currentProfile].adjX,
                                   OF_Prefs::profiles[OF_Prefs::currentProfile].adjY);
@@ -1066,7 +1011,7 @@ void ExecRunMode() {
 #endif  // USES_DISPLAY
 
 // If using RP2040, we offload the button processing to the second core.
-#if /*!defined(ARDUINO_ARCH_RP2040) ||*/ !defined(DUAL_CORE)  // 696969 per ESP32
+#if !defined(ARDUINO_ARCH_RP2040) || !defined(DUAL_CORE)
 
     #ifdef USES_TEMP
         if (OF_Prefs::pins[OF_Const::tempPin] > -1)
