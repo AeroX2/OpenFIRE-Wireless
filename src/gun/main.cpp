@@ -1198,7 +1198,7 @@ void ExecGunModeDocked() {
 #endif  // GIT_HASH
     );
     buf[pos++] = OF_Const::serialTerminator;
-    pos += sprintf(&buf[pos], "%s", "waveshare-esp32-s3-pico");
+    pos += sprintf(&buf[pos], "%s", OPENFIRE_BOARD);
     buf[pos++] = OF_Const::serialTerminator;
     memcpy(&buf[pos], &OF_Prefs::usb, sizeof(OF_Prefs::USBMap_t));
     pos += sizeof(OF_Prefs::USBMap_t);
