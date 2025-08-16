@@ -454,7 +454,7 @@ class OF_Const {
         // Board Type: ESP32-C6
         // Notes: ESP32-C6 has different pin layout than ESP32-S3
         {"seeed-xiao-esp32c6", {/*00*/ btnSelect,   btnHome,     btnGunA,     btnUnmapped, btnPump,
-                                /*05*/ periphSCL,   rumblePin,   periphSDA,   btnUnmapped, btnUnmapped,
+                                /*05*/ rumblePin,   periphSDA,   periphSCL,   btnUnmapped, btnUnmapped,
                                 /*10*/ btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped, btnUnmapped,
                                 /*15*/ btnUnmapped, btnGunLeft,  solenoidPin, camSCL,      btnTrigger,
                                 /*20*/ camSDA,      btnGunUp,    btnGunRight, btnGunDown,  btnUnmapped,

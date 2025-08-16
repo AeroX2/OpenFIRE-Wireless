@@ -1224,6 +1224,13 @@ void OF_Serial::SerialProcessingDocked() {
                                     RXbuf[rxLen++] = profNum;
                                 }
                                 rxLen += Serial.readBytes(&RXbuf[rxLen], datSize);
+                                // HWCDCSerial.printf("Received: %d\n", rxLen);
+                                // for (int i = 0; i < rxLen; i++) {
+                                //     HWCDCSerial.printf("%02X ", RXbuf[i]);
+                                // }
+                                // HWCDCSerial.println();
+
+                                // HWCDCSerial.printf("Type: %d\n", type);
                                 switch (type) {
                                     case OF_Const::sCommitToggles:
                                         SerialBatchRecv(RXbuf, OF_Prefs::toggles, OF_Prefs::OFPresets.boolTypes_Strings,

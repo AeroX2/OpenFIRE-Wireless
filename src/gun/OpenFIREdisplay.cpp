@@ -36,7 +36,7 @@ bool ExtDisplay::Begin() {
     // any display objects should get deleted from the above, so don't think it can be a new object thing)...
     if (OF_Prefs::pins[OF_Const::periphSCL] >= 0 && OF_Prefs::pins[OF_Const::periphSDA] >= 0) {
 #ifdef ARDUINO_ARCH_ESP32
-        Wire1.begin(6, 7, 100000);  // ESP32-C6 uses fixed pins for I2C
+        Wire1.setPins(OF_Prefs::pins[OF_Const::periphSDA], OF_Prefs::pins[OF_Const::periphSCL]);  // 696969 per esp32
     #ifdef USE_LOVYAN_GFX
         display = new LGFX_SSD1306(
             1 /*i2c_port wire_1*/, OF_Prefs::pins[OF_Const::periphSDA], OF_Prefs::pins[OF_Const::periphSCL],

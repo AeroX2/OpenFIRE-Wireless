@@ -280,7 +280,10 @@ void setup() {
             // HWCDCSerial.println("Writing: ");
             // HWCDCSerial.printf("%02X ", data);
             // HWCDCSerial.println();
-            serial.write(PACKET_SERIAL);
+            size_t written = serial.write(PACKET_SERIAL);
+            if (written == 0) {
+                return 0;  // Connection failed
+            }
             return serial.write(data);
         }
 
@@ -290,35 +293,66 @@ void setup() {
             //     HWCDCSerial.printf("%02X ", buffer[i]);
             // }
             // HWCDCSerial.println();
-            serial.write(PACKET_SERIAL_WITH_SIZE);
-            serial.write(size);
+            size_t written = serial.write(PACKET_SERIAL_WITH_SIZE);
+            if (written == 0) {
+                return 0;  // Connection failed
+            }
+            written = serial.write(size);
+            if (written == 0) {
+                return 0;  // Connection failed
+            }
             return serial.write(buffer, size);
         }
 
         virtual int read() override {
+            // Add safety check for serial connection
+            if (!serial.available()) {
+                return -1;
+            }
+
             int c = serial.read();
             if (c != PACKET_SERIAL) {
                 return -1;
             }
-            while (!serial.available()) {
+
+            // Add timeout to prevent infinite loop
+            unsigned long startTime = millis();
+            while (!serial.available() && (millis() - startTime) < 100) {
                 delay(1);
             }
+
+            if (!serial.available()) {
+                return -1;  // Timeout
+            }
+
             c = serial.read();
             return c;
         }
 
         virtual size_t readBytes(char *buffer, size_t length) override {
+            size_t bytesRead = 0;
             for (int i = 0; i < length; i++) {
-                buffer[i] = read();
+                int c = read();
+                if (c == -1) {
+                    break;  // Stop on error
+                }
+                buffer[i] = c;
+                bytesRead++;
             }
-            return length;
+            return bytesRead;
         }
 
         virtual size_t readBytes(uint8_t *buffer, size_t size) override {
+            size_t bytesRead = 0;
             for (int i = 0; i < size; i++) {
-                buffer[i] = read();
+                int c = read();
+                if (c == -1) {
+                    break;  // Stop on error
+                }
+                buffer[i] = c;
+                bytesRead++;
             }
-            return size;
+            return bytesRead;
         }
 
         virtual size_t readBytesUntil(char terminator, char *buffer, size_t size) {
@@ -369,8 +403,7 @@ void setup() {
         }
     };
 
-    // Create the wrapper instance
-    NowSerialWrapper NowSerialWrapperInstance(NowSerialDongle);
+    static NowSerialWrapper NowSerialWrapperInstance(NowSerialDongle);
     Serial_OpenFIRE_Stream = &NowSerialWrapperInstance;
 
     #ifdef Serial
@@ -1165,7 +1198,7 @@ void ExecGunModeDocked() {
 #endif  // GIT_HASH
     );
     buf[pos++] = OF_Const::serialTerminator;
-    pos += sprintf(&buf[pos], "%s", "esp32-s3");
+    pos += sprintf(&buf[pos], "%s", "waveshare-esp32-s3-pico");
     buf[pos++] = OF_Const::serialTerminator;
     memcpy(&buf[pos], &OF_Prefs::usb, sizeof(OF_Prefs::USBMap_t));
     pos += sizeof(OF_Prefs::USBMap_t);
