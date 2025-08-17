@@ -29,7 +29,10 @@ extern Stream *Serial_OpenFIRE_Stream;
 void OF_Serial::SerialProcessing() {
     // For more info about Serial commands, see the OpenFIRE repo wiki.
 
-    switch (Serial.read()) {
+    int c = Serial.read();
+    HWCDCSerial.print("Received: ");
+    HWCDCSerial.println(c, DEC);
+    switch (c) {
         // Start Signal
         case 'S':
             if (serialMode)

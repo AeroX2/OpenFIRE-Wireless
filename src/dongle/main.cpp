@@ -37,7 +37,7 @@ Adafruit_USBD_HID usbHid;
 
     // ESP32C6 Gun: B4:3A:45:89:F5:34
     // ESP32C6 Pedal: B4:3A:45:89:EC:20
-    #define GUN_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xF5, 0x34}
+    #define GUN_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xF5, 0xD0}
     #define PEDAL_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xEC, 0x20}
 
 const MacAddress gun_peer_mac(GUN_MAC_ADDRESS);
@@ -214,19 +214,25 @@ void loop() {
     }
 
     // Handle USB serial to gun communication
-    while (Serial.available() && NowSerialGun.availableForWrite() && NowSerialPedal.availableForWrite()) {
+    while (Serial.available()) {
         int c = Serial.read();
         // Send serial command - wrapper automatically handles PACKET_SERIAL and termination sequence
-        NowSerialGun.write(PACKET_SERIAL);
-        if (NowSerialGun.write(c) <= 0) {
-            Serial.println("Failed to send data to gun");
-            break;
+        if (NowSerialGun.availableForWrite()) {
+            NowSerialGun.write(PACKET_SERIAL);
+            if (NowSerialGun.write(c) <= 0) {
+                Serial.println("Failed to send data to gun");
+                break;
+            }
+            // NowSerialGun.flush();
         }
 
-        NowSerialPedal.write(PACKET_SERIAL);
-        if (NowSerialPedal.write(c) <= 0) {
-            Serial.println("Failed to send data to pedal");
-            break;
+        if (NowSerialPedal.availableForWrite()) {
+            NowSerialPedal.write(PACKET_SERIAL);
+            if (NowSerialPedal.write(c) <= 0) {
+                Serial.println("Failed to send data to pedal");
+                break;
+            }
+            // NowSerialPedal.flush();
         }
     }
 

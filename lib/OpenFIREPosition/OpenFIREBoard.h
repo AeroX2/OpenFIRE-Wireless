@@ -20,8 +20,8 @@
     #define DFROBOT_IR_IIC_CLOCK 1000000
 
     // software button anti-glitch
-    #define BTN_AG_MASK 0xFFFFFFFF
-    #define BTN_AG_MASK2 0xFFFFFFFF
+    #define BTN_AG_MASK 0xF
+    #define BTN_AG_MASK2 0xFFF
 #else
     // unknown board
     // this will use millis() for camera update timing instead of a hardware timer

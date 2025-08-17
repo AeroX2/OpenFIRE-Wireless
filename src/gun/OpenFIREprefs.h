@@ -95,8 +95,8 @@ class OF_Prefs {
         true,   // rumble
         true,   // solenoid
         false,  // autofire
-        false,  // simple pause menu
-        false,  // hold to pause
+        true,   // simple pause menu
+        true,   // hold to pause
         true,   // 4pin common anode
         false,  // low buttons mode
         false,  // rumble force-feedback mode
@@ -115,7 +115,7 @@ class OF_Prefs {
         45,                         // solenoid on length
         80,                         // solenoid off length
         500,                        // solenoid hold length
-        2500,                       // hold-to-pause length
+        500,                        // hold-to-pause length
         1,                          // custom NeoPixel strand length
         0,                          // custom NeoPixel static count
         0xFF0000,                   // custom pixel color 1

@@ -1,0 +1,3 @@
+[submodule "src/gun/boards"]
+	path = src/gun/boards
+	url = https://github.com/AeroX2/OpenFIRE-Boards

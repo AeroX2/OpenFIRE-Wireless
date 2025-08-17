@@ -242,6 +242,9 @@ void setup() {
         delay(100);
     }
 
+    HWCDCSerial.println("MAC Address: ");
+    HWCDCSerial.println(WiFi.macAddress());
+
     NowSerialDongle.begin(115200);
 
         #endif
@@ -1080,10 +1083,18 @@ void ExecRunMode() {
             OF_Serial::SerialHandling();  // Process the force feedback from the current queue.
     #endif                                // MAMEHOOKER
 
+        if (FW_Common::gunMode == FW_Const::GunMode_Docked) {
+            return;
+        }
+
         if (FW_Common::buttons.pressedReleased == FW_Const::EscapeKeyBtnMask)
             SendEscapeKey();
 
         if (OF_Prefs::toggles[OF_Const::holdToPause]) {
+            // HWCDCSerial.println("Hold to Pause");
+            // HWCDCSerial.println(FW_Common::buttons.debounced == FW_Const::EnterPauseModeHoldBtnMask);
+            // HWCDCSerial.println(!FW_Common::lastSeen);
+            // HWCDCSerial.println(!pauseHoldStarted);
             if ((FW_Common::buttons.debounced == FW_Const::EnterPauseModeHoldBtnMask) && !FW_Common::lastSeen &&
                 !pauseHoldStarted) {
                 pauseHoldStarted = true;
@@ -1100,6 +1111,7 @@ void ExecRunMode() {
 
             } else if (pauseHoldStarted) {
                 unsigned long t = millis();
+                HWCDCSerial.println(t - pauseHoldStartstamp);
                 if (t - pauseHoldStartstamp > OF_Prefs::settings[OF_Const::holdToPauseLength]) {
                     // MAKE SURE EVERYTHING IS DISENGAGED:
                     OF_FFB::FFBShutdown();
@@ -1173,6 +1185,7 @@ void ExecRunModeProcessing() {
 
 // For use with the OpenFIRE app when it connects to this board.
 void ExecGunModeDocked() {
+    HWCDCSerial.println("ExecGunModeDocked");
     FW_Common::buttons.ReportDisable();
     FW_Common::buttons.ReleaseAll();
 
@@ -1301,8 +1314,9 @@ void TriggerFire() {
         }
 
         if (!OF_Serial::serialMode && !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Start) &&
-            !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Select))
+            !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Select)) {
             OF_FFB::FFBOnScreen();
+        }
         // We're shooting outside of the screen boundaries!
     } else {
         // If we are in offscreen button mode (and aren't dragging a shot offscreen)

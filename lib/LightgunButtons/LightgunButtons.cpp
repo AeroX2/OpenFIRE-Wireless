@@ -131,6 +131,11 @@ uint32_t LightgunButtons::Poll(unsigned long minTicks) {
                 // read the pin, expected to return 0 or 1
                 uint32_t state = digitalRead(btn.pin);
 
+                // HACK: Invert state for trigger button.
+                if (i == 0) {
+                    state = !state;
+                }
+
                 // if a state fifo mask is defined
                 if (btn.debounceFifoMask) {
                     // add the state to the fifo

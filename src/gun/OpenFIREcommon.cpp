@@ -238,10 +238,12 @@ void FW_Common::CameraSet() {
 }
 
 void FW_Common::SetMode(const FW_Const::GunMode_e &newMode) {
+    HWCDCSerial.println("Switching modes");
     if (gunMode == newMode)
         return;
 
     // exit current mode
+    HWCDCSerial.println("Previous mode: " + String(gunMode));
     switch (gunMode) {
         case FW_Const::GunMode_Run:
             stateFlags |= FW_Const::StateFlag_PrintPreferences;
@@ -259,6 +261,8 @@ void FW_Common::SetMode(const FW_Const::GunMode_e &newMode) {
     }
 
     // enter new mode
+    HWCDCSerial.print("New mode: ");
+    HWCDCSerial.println(newMode);
     gunMode = newMode;
     switch (newMode) {
         case FW_Const::GunMode_Run:
@@ -312,6 +316,8 @@ void FW_Common::SetMode(const FW_Const::GunMode_e &newMode) {
 #ifdef LED_ENABLE
     SetLedColorFromMode();
 #endif  // LED_ENABLE
+
+    HWCDCSerial.println("Switching modes");
 }
 
 void FW_Common::SetRunMode(const FW_Const::RunMode_e &newMode) {
