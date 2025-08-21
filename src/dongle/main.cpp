@@ -35,10 +35,8 @@ Adafruit_USBD_HID usbHid;
         #define ESPNOW_WIFI_IF WIFI_IF_AP
     #endif
 
-    // ESP32C6 Gun: B4:3A:45:89:F5:34
-    // ESP32C6 Pedal: B4:3A:45:89:EC:20
     #define GUN_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xF5, 0xD0}
-    #define PEDAL_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xEC, 0x20}
+    #define PEDAL_MAC_ADDRESS {0xB4, 0x3A, 0x45, 0x89, 0xF5, 0x34}
 
 const MacAddress gun_peer_mac(GUN_MAC_ADDRESS);
 const MacAddress pedal_peer_mac(PEDAL_MAC_ADDRESS);
@@ -48,6 +46,33 @@ ESP_NOW_Serial_Class NowSerialPedal(pedal_peer_mac, ESPNOW_WIFI_CHANNEL, ESPNOW_
 
 // ESP_NOW_Serial_Wrapper NowSerialGun(NowSerialGunRaw);
 // ESP_NOW_Serial_Wrapper NowSerialPedal(NowSerialPedalRaw);
+
+// Store both gun and pedal mouse data for merging
+hid_abs_mouse_report_t gunMouseReport = {0};
+hid_abs_mouse_report_t pedalMouseReport = {0};
+bool hasGunMouseData = false;
+bool hasPedalMouseData = false;
+
+// Function to merge gun and pedal mouse data and send combined report
+void sendMergedMouseReport() {
+    hid_abs_mouse_report_t mergedReport = {0};
+
+    if (hasGunMouseData) {
+        // Use gun's position data (x, y, wheel)
+        mergedReport.x = gunMouseReport.x;
+        mergedReport.y = gunMouseReport.y;
+        mergedReport.wheel = gunMouseReport.wheel;
+        mergedReport.buttons |= gunMouseReport.buttons;
+    }
+
+    if (hasPedalMouseData) {
+        // Merge pedal buttons
+        mergedReport.buttons |= pedalMouseReport.buttons;
+    }
+
+    // Send the merged report
+    usbHid.sendReport(HID_RID_e::HID_RID_MOUSE, (uint8_t *)&mergedReport, sizeof(hid_abs_mouse_report_t));
+}
 #endif
 
 #ifdef USES_DISPLAY
@@ -101,15 +126,6 @@ void handlePacketData(ESP_NOW_Serial_Class &serial) {
             while (!serial.available()) {
                 delay(1);
             }
-            int c = serial.read();
-            Serial.write(c);
-            Serial.flush();
-            break;
-        }
-        case PACKET_SERIAL_WITH_SIZE: {
-            while (!serial.available()) {
-                delay(1);
-            }
             size_t size = serial.read();
             uint8_t buf[size];
             serial.readBytes(buf, size);
@@ -118,9 +134,20 @@ void handlePacketData(ESP_NOW_Serial_Class &serial) {
             break;
         }
         case PACKET_MOUSE:
-            // Read mouse data and forward to USB HID
+            // Read mouse data
             bytesRead = serial.readBytes((uint8_t *)&mouseReport, sizeof(hid_abs_mouse_report_t));
-            usbHid.sendReport(HID_RID_e::HID_RID_MOUSE, (uint8_t *)&mouseReport, sizeof(hid_abs_mouse_report_t));
+
+            // Store the data based on source
+            if (&serial == &NowSerialGun) {
+                gunMouseReport = mouseReport;
+                hasGunMouseData = true;
+            } else if (&serial == &NowSerialPedal) {
+                pedalMouseReport = mouseReport;
+                hasPedalMouseData = true;
+            }
+
+            // Always send merged report
+            sendMergedMouseReport();
             break;
         case PACKET_KEYBOARD:
             // Read keyboard data and forward to USB HID
@@ -201,9 +228,9 @@ void setup() {
 #endif  // USES_DISPLAY
 }
 
+uint8_t buffer[RX_FRAME_CAP];
 void loop() {
     // Read from gun
-
     while (NowSerialGun.available()) {
         handlePacketData(NowSerialGun);
     }
@@ -213,27 +240,28 @@ void loop() {
         handlePacketData(NowSerialPedal);
     }
 
-    // Handle USB serial to gun communication
+    // Handle USB serial to gun & pedal communication (forward host bytes over ESP-NOW framed as PACKET_SERIAL)
     while (Serial.available()) {
-        int c = Serial.read();
-        // Send serial command - wrapper automatically handles PACKET_SERIAL and termination sequence
-        if (NowSerialGun.availableForWrite()) {
-            NowSerialGun.write(PACKET_SERIAL);
-            if (NowSerialGun.write(c) <= 0) {
-                Serial.println("Failed to send data to gun");
-                break;
-            }
-            // NowSerialGun.flush();
-        }
+        size_t avail = Serial.available();
+        if (!avail)
+            break;
+        if (avail > RX_FRAME_CAP)
+            avail = RX_FRAME_CAP;
+        size_t n = Serial.readBytes(buffer, avail);
+        if (n == 0)
+            break;  // nothing actually read; avoid tight loop
 
-        if (NowSerialPedal.availableForWrite()) {
-            NowSerialPedal.write(PACKET_SERIAL);
-            if (NowSerialPedal.write(c) <= 0) {
-                Serial.println("Failed to send data to pedal");
-                break;
-            }
-            // NowSerialPedal.flush();
-        }
+        auto sendFramed = [&](ESP_NOW_Serial_Class &dest) {
+            if (!dest.availableForWrite())
+                return;  // skip if can't write now
+            dest.write(PACKET_SERIAL);
+            dest.write((uint8_t)n);
+            dest.write(buffer, n);
+            dest.flush();
+        };
+
+        sendFramed(NowSerialGun);
+        sendFramed(NowSerialPedal);
     }
 
     delay(1);

@@ -49,14 +49,16 @@
     #include <Adafruit_TinyUSB.h>
     #include <Arduino.h>
 
-    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
-        #define PACKET_SERIAL 0x01
-        #define PACKET_SERIAL_WITH_SIZE 0x02
-        #define PACKET_MOUSE 0x03
-        #define PACKET_KEYBOARD 0x04
-        #define PACKET_GAMEPAD 0x05
-        #include <ESP32_NOW_Serial.h>
+    // Wireless packet type identifiers (always available to all wireless components)
+    #define PACKET_SERIAL 0x01  // Unified length-prefixed serial frame
+    #define PACKET_MOUSE 0x02
+    #define PACKET_KEYBOARD 0x03
+    #define PACKET_GAMEPAD 0x04
 
+    #define RX_FRAME_CAP 256
+
+    #ifdef OPENFIRE_WIRELESS_DEVICE_ESPNOW
+        #include <ESP32_NOW_Serial.h>
 extern ESP_NOW_Serial_Class NowSerialDongle;
     #endif
 

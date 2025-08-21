@@ -83,6 +83,8 @@ void processSerialCommand(char command) {
 
 void setup() {
     Serial.begin(9600);
+    delay(3000);
+
     Serial.println("OpenFIRE Simple - Pedal Only - Starting up...");
 
     // Initialize pedal button pin
@@ -96,26 +98,67 @@ void setup() {
         delay(100);
     }
 
+    Serial.print("MAC Address: ");
+    Serial.println(WiFi.macAddress());
+
     TinyUSBDevices.begin(-1);
     NowSerialDongle.begin(115200);
 
     Serial.println("Setup complete!");
 }
 
-void loop() {
-    // Check for serial commands
-    if (NowSerialDongle.available()) {
-        char s = NowSerialDongle.read();
-        if (s == 0x01) {  // TODO: make this a constant, also support SERIAL_WITH_SIZE
-            char command = NowSerialDongle.read();
-            processSerialCommand(command);
-        } else {
-            Serial.printf("Received packet type: %d\n", s);
+// Handle incoming wireless packets (serial and potential future HID packets)
+static void handleWirelessPackets() {
+    if (!NowSerialDongle.available())
+        return;
+
+    int pktType = NowSerialDongle.read();
+    if (pktType == PACKET_SERIAL) {
+        // Length-prefixed serial command payload
+        unsigned long waitStart = millis();
+        while (!NowSerialDongle.available() && (millis() - waitStart) < 50) { /* wait for length */
         }
+        if (!NowSerialDongle.available()) {
+            Serial.println("Pedal: Timeout waiting for serial length");
+            return;
+        }
+        int len = NowSerialDongle.read();
+        if (len > 0 && len < 128) {  // sanity cap
+            uint8_t buf[128];
+            int received = 0;
+            unsigned long start = millis();
+            while (received < len && (millis() - start) < 50) {
+                if (NowSerialDongle.available()) {
+                    buf[received++] = NowSerialDongle.read();
+                }
+            }
+            if (received == len) {
+                for (int i = 0; i < len; ++i) {
+                    processSerialCommand((char)buf[i]);
+                }
+            } else {
+                Serial.println("Pedal: Incomplete serial frame discarded");
+            }
+        } else {
+            Serial.printf("Pedal: Invalid serial frame length %d\n", len);
+        }
+    } else if (pktType == PACKET_MOUSE) {
+        // Ignore for now
+    } else if (pktType == PACKET_KEYBOARD) {
+        // Ignore
+    } else if (pktType == PACKET_GAMEPAD) {
+        // Ignore
+    } else {
+        Serial.printf("Pedal: Unknown packet type 0x%02X\n", pktType);
     }
+}
+
+void loop() {
+    // Handle wireless packets
+    handleWirelessPackets();
 
     // Read pedal button state
-    pedalPressed = !digitalRead(PEDAL_PIN);  // Inverted because of INPUT_PULLUP
+    pedalPressed = digitalRead(PEDAL_PIN);  // Inverted because of INPUT_PULLUP
 
     // Print pedal press/release events
     if (pedalPressed && !lastPedalPressed) {

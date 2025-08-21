@@ -44,9 +44,6 @@ void esploop1(void *pvParameters) {
     #include <WiFi.h>
     // #include "ESP_NOW_Serial_Wrapper.h"
 
-    // Packet type identifiers
-    #define PACKET_SERIAL 0x01
-
     // Channel to be used by the ESP-NOW protocol
     #define ESPNOW_WIFI_CHANNEL 1
 
@@ -269,125 +266,165 @@ void setup() {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef OPENFIRE_WIRELESS_ENABLE
-    // Create a wrapper class that prepends PACKET_SERIAL to all serial communications
+    // Create a wrapper class that frames all serial communications with PACKET_SERIAL [len][payload]
     class NowSerialWrapper : public Stream {
        private:
         ESP_NOW_Serial_Class &serial;
 
+        // Reception framing state
+        uint8_t rxFrame[RX_FRAME_CAP];
+        uint16_t rxLen = 0;
+        uint16_t rxPos = 0;
+
        public:
         NowSerialWrapper(ESP_NOW_Serial_Class &s) : serial(s) {}
 
-        // Override only the write methods - all print/println methods inherit from Print class
-        // and will automatically use our write methods, prepending PACKET_SERIAL
+        // Transmission: always send framed block (len prefix)
         virtual size_t write(uint8_t data) override {
-            // HWCDCSerial.println("Writing: ");
-            // HWCDCSerial.printf("%02X ", data);
-            // HWCDCSerial.println();
-            size_t written = serial.write(PACKET_SERIAL);
-            if (written == 0) {
-                return 0;  // Connection failed
-            }
-            return serial.write(data);
+            uint8_t hdr[2] = {PACKET_SERIAL, 1};
+            if (serial.write(hdr, 2) != 2)
+                return 0;
+            return serial.write(&data, 1);
         }
 
         virtual size_t write(const uint8_t *buffer, size_t size) override {
-            // HWCDCSerial.println("Writing with size: ");
-            // for (int i = 0; i < size; i++) {
-            //     HWCDCSerial.printf("%02X ", buffer[i]);
-            // }
-            // HWCDCSerial.println();
-            size_t written = serial.write(PACKET_SERIAL_WITH_SIZE);
-            if (written == 0) {
-                return 0;  // Connection failed
+            if (size == 0)
+                return 0;
+            while (size) {
+                uint8_t chunk = size > 255 ? 255 : (uint8_t)size;  // allow large prints split into 255-byte frames
+                uint8_t hdr[2] = {PACKET_SERIAL, chunk};
+                if (serial.write(hdr, 2) != 2)
+                    return 0;
+                if (serial.write(buffer, chunk) != chunk)
+                    return 0;
+                buffer += chunk;
+                size -= chunk;
             }
-            written = serial.write(size);
-            if (written == 0) {
-                return 0;  // Connection failed
+            return 1;  // Print base class treats non-zero as success (we split internally)
+        }
+
+        bool fillFrame() {
+            // If current frame still has data, nothing to do
+            if (rxPos < rxLen)
+                return true;
+            rxLen = 0;
+            rxPos = 0;
+            // Need at least 2 bytes for header
+            unsigned long start = millis();
+            while (serial.available() < 2 && (millis() - start) < 50) {
+                delay(1);
             }
-            return serial.write(buffer, size);
+            if (serial.available() < 2)
+                return false;  // timeout
+            int type = serial.read();
+            if (type != PACKET_SERIAL) {
+                // Not a serial payload; could be HID or other packet
+                // For now discard length if type matches known fixed-size structures
+                // Caller elsewhere (higher layer) handles non-serial packets.
+                return false;  // leave for outer processing if added later
+            }
+            int len = serial.read();
+            if (len <= 0 || len > (int)RX_FRAME_CAP) {
+                // Discard len bytes (if any arrive) to resync
+                unsigned long waitStart = millis();
+                while (serial.available() < len && (millis() - waitStart) < 50) {
+                    delay(1);
+                }
+                for (int i = 0; i < len && serial.available(); ++i)
+                    serial.read();
+                return false;
+            }
+            // Wait until full frame payload available (bounded wait)
+            unsigned long waitStart = millis();
+            while (serial.available() < len && (millis() - waitStart) < 50) {
+                delay(1);
+            }
+            if (serial.available() < len) {
+                // Timeout, drop partial
+                for (int i = 0; i < len && serial.available(); ++i)
+                    serial.read();
+                return false;
+            }
+            for (int i = 0; i < len; ++i) {
+                rxFrame[i] = (uint8_t)serial.read();
+            }
+            rxLen = len;
+            rxPos = 0;
+            return rxLen > 0;
         }
 
         virtual int read() override {
-            // Add safety check for serial connection
-            if (!serial.available()) {
+            if (!fillFrame())
                 return -1;
-            }
-
-            int c = serial.read();
-            if (c != PACKET_SERIAL) {
+            if (rxPos >= rxLen)
                 return -1;
-            }
-
-            // Add timeout to prevent infinite loop
-            unsigned long startTime = millis();
-            while (!serial.available() && (millis() - startTime) < 100) {
-                delay(1);
-            }
-
-            if (!serial.available()) {
-                return -1;  // Timeout
-            }
-
-            c = serial.read();
-            return c;
+            return rxFrame[rxPos++];
         }
 
         virtual size_t readBytes(char *buffer, size_t length) override {
-            size_t bytesRead = 0;
-            for (int i = 0; i < length; i++) {
+            size_t count = 0;
+            while (count < length) {
                 int c = read();
-                if (c == -1) {
-                    break;  // Stop on error
-                }
-                buffer[i] = c;
-                bytesRead++;
+                if (c < 0)
+                    break;
+                buffer[count++] = (char)c;
             }
-            return bytesRead;
+            return count;
         }
-
-        virtual size_t readBytes(uint8_t *buffer, size_t size) override {
-            size_t bytesRead = 0;
-            for (int i = 0; i < size; i++) {
+        virtual size_t readBytes(uint8_t *buffer, size_t length) override {
+            size_t count = 0;
+            while (count < length) {
                 int c = read();
-                if (c == -1) {
-                    break;  // Stop on error
-                }
-                buffer[i] = c;
-                bytesRead++;
+                if (c < 0)
+                    break;
+                buffer[count++] = (uint8_t)c;
             }
-            return bytesRead;
+            return count;
         }
 
         virtual size_t readBytesUntil(char terminator, char *buffer, size_t size) {
-            for (int i = 0; i < size; i++) {
+            size_t count = 0;
+            while (count < size) {
                 int c = read();
-                if (c == terminator) {
-                    buffer[i] = c;
-                    return i + 1;
-                }
-                buffer[i] = c;
+                if (c < 0)
+                    break;
+                buffer[count++] = (char)c;
+                if (c == terminator)
+                    break;
             }
-            return size;
+            return count;
         }
-
         virtual size_t readBytesUntil(char terminator, uint8_t *buffer, size_t size) {
-            for (int i = 0; i < size; i++) {
+            size_t count = 0;
+            while (count < size) {
                 int c = read();
-                if (c == terminator) {
-                    buffer[i] = c;
-                    return i + 1;
-                }
-                buffer[i] = c;
+                if (c < 0)
+                    break;
+                buffer[count++] = (uint8_t)c;
+                if (c == terminator)
+                    break;
             }
-            return size;
+            return count;
         }
 
         // Delegate other methods directly
         int available() {
+            // Delegate to underlying transport so higher-level code knows when to call read(),
+            // which will trigger fillFrame() and frame assembly. We intentionally do NOT
+            // pre-fill here to keep available() lightweight and non-blocking.
             return serial.available();
         }
         int peek() {
-            return serial.peek();
+            // Return next payload byte without consuming it.
+            // If we still have bytes in the current frame, just expose next.
+            if (rxPos < rxLen)
+                return rxFrame[rxPos];
+            // Otherwise attempt to build a new frame (may wait briefly per fillFrame timeout logic).
+            if (!fillFrame())
+                return -1;  // no framed data ready
+            if (rxPos < rxLen)
+                return rxFrame[rxPos];
+            return -1;
         }
         void flush() {
             serial.flush();

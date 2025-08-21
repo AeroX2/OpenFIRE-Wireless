@@ -30,7 +30,7 @@ void OF_Serial::SerialProcessing() {
     // For more info about Serial commands, see the OpenFIRE repo wiki.
 
     int c = Serial.read();
-    HWCDCSerial.print("Received: ");
+    HWCDCSerial.print("Received in normal: ");
     HWCDCSerial.println(c, DEC);
     switch (c) {
         // Start Signal
@@ -1017,11 +1017,10 @@ void OF_Serial::SerialHandling() {
 // Serial Buffer in Docked Mode should always be being read by the main core on multicore systems
 void OF_Serial::SerialProcessingDocked() {
     char c = Serial.read();
-    HWCDCSerial.printf("Received: %d\n", c);
+    HWCDCSerial.printf("Received in docked: %d\n", c);
     switch (c) {
         // Enter Docked Mode (in case running from first boot)
         case OF_Const::sDock1:
-            Serial_available(1);
             if (Serial.read() == OF_Const::sDock2)
                 FW_Common::SetMode(FW_Const::GunMode_Docked);
             break;
@@ -1081,12 +1080,10 @@ void OF_Serial::SerialProcessingDocked() {
                 FW_Common::SetRunMode(FW_Const::RunMode_Processing);
             break;
         case OF_Const::sCaliProfile: {
-            Serial_available(1);
             if (Serial.peek() < PROFILE_COUNT) {
                 FW_Common::SelectCalProfile(Serial.read());
                 char buf[2] = {OF_Const::sCurrentProf, (uint8_t)OF_Prefs::currentProfile};
                 Serial.write(buf, sizeof(buf));
-                Serial_available(1);
                 if (Serial.read() == OF_Const::sCaliStart) {
                     if (FW_Common::camNotAvailable) {
                         buf[0] = OF_Const::sError;
@@ -1094,7 +1091,6 @@ void OF_Serial::SerialProcessingDocked() {
                         Serial.write(buf, sizeof(buf));
                     } else {
                         // sensitivity/layout preset
-                        Serial_available(1);
                         if (Serial.peek() != -1) {
                             FW_Common::SetIrSensitivity(Serial.peek() & 0b11110000);
                             FW_Common::SetIrLayout(Serial.read() >> 4);
@@ -1105,11 +1101,8 @@ void OF_Serial::SerialProcessingDocked() {
                     }
                 }
             } else {
-                Serial_available(1);
                 Serial.read();
-                Serial_available(1);
                 if (Serial.read() == OF_Const::sCaliStart) {
-                    Serial_available(1);
                     if (Serial.read() != -1)
                         Serial.read();
                 }
@@ -1118,7 +1111,6 @@ void OF_Serial::SerialProcessingDocked() {
         }
 #ifdef USES_SOLENOID
         case OF_Const::sTestSolenoid:
-            Serial_available(1);
             if (Serial.read() == true) {
                 digitalWrite(OF_Prefs::pins[OF_Const::solenoidPin], HIGH);
                 delay(OF_Prefs::settings[OF_Const::solenoidOnLength]);
@@ -1128,7 +1120,6 @@ void OF_Serial::SerialProcessingDocked() {
 #endif  // USES_SOLENOID
 #ifdef USES_RUMBLE
         case OF_Const::sTestRumble:
-            Serial_available(1);
             if (Serial.read() == true) {
                 analogWrite(OF_Prefs::pins[OF_Const::rumblePin], OF_Prefs::settings[OF_Const::rumbleStrength]);
                 delay(OF_Prefs::settings[OF_Const::rumbleInterval]);
@@ -1142,24 +1133,20 @@ void OF_Serial::SerialProcessingDocked() {
 #endif             // USES_RUMBLE
 #ifdef LED_ENABLE  // meant to be for 4pins, but will update all LED devices anyways.
         case OF_Const::sTestLEDR:
-            Serial_available(1);
             if (Serial.read() == true)
                 OF_RGB::LedUpdate(255, 0, 0);
             break;
         case OF_Const::sTestLEDG:
-            Serial_available(1);
             if (Serial.read() == true)
                 OF_RGB::LedUpdate(0, 255, 0);
             break;
         case OF_Const::sTestLEDB:
-            Serial_available(1);
             if (Serial.read() == true)
                 OF_RGB::LedUpdate(0, 0, 255);
             break;
 #endif  // LED_ENABLE
 
         case OF_Const::sCommitStart: {
-            Serial_available(1);
             if (Serial.read() == 1) {
                 FW_Common::buttons.Unset();
                 bool exit = false;
@@ -1203,7 +1190,6 @@ void OF_Serial::SerialProcessingDocked() {
 
                             //// Saving ops
                             case OF_Const::sCommitID:
-                                Serial_available(18);
                                 rxLen = Serial.readBytes(RXbuf, 18);
                                 // HWCDCSerial.printf("Received ID: ");
                                 // for (int i = 0; i < rxLen; i++) {
@@ -1587,14 +1573,3 @@ void OF_Serial::PrintDebugSerial() {
     }
 }
 #endif  // DEBUG_SERIAL
-
-bool OF_Serial::Serial_available(uint8_t min) {
-    if ((Serial.available() >= min))
-        return true;
-    else {
-        unsigned long timer_out = millis();
-        while ((Serial.available() < min) && (millis() - timer_out < 1000))
-            yield();
-        return Serial.available() >= min ? true : false;
-    }
-}
