@@ -33,9 +33,6 @@ class OF_Serial {
     // Main routine that prints information to connected serial monitor when the gun enters Pause Mode.
     static void PrintResults();
 
-    // utility function to wait for n bytes with timeout //696969 inserted by me
-    static bool Serial_available(uint8_t min = 1);
-
 #ifdef DEBUG_SERIAL
     static void PrintDebugSerial();
 #endif  // DEBUG_SERIAL
@@ -72,6 +69,10 @@ class OF_Serial {
     static inline int serialMappingsPedalMode = 0;  // Marker if Pedal has been remapped, for FW_Common::UpdateBindings
     // from least to most significant bit: solenoid digital, solenoid pulse, rumble digital, rumble pulse, R/G/B direct,
     // RGB (any) pulse.
+
+    // If true, then mamehook will tell when the solenoid fires or not, otherwise the lightgun will determine how to
+    // fire the solenoid based on M8 commands.
+    static inline bool serialSolenoid = false;
 
     // These do get addressed by the main code
     #ifdef USES_DISPLAY

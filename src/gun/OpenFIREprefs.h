@@ -114,7 +114,7 @@ class OF_Prefs {
         150,                        // rumble length
         45,                         // solenoid on length
         80,                         // solenoid off length
-        500,                        // solenoid hold length
+        0,                          // solenoid hold length
         500,                        // hold-to-pause length
         1,                          // custom NeoPixel strand length
         0,                          // custom NeoPixel static count

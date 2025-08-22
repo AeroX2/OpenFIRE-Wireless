@@ -80,9 +80,6 @@ def main():
     ap = argparse.ArgumentParser(description="Simple OpenFIRE Dongle Console")
     ap.add_argument('-p', '--port', help='COM port (e.g. COM7)')
     ap.add_argument('-b', '--baud', type=int, default=9600, help='Baud rate (default 9600)')
-    ap.add_argument('--no-newline', action='store_true', help='Do NOT append newline automatically')
-    ap.add_argument('--echo', action='store_true', help='Echo what you send')
-    ap.add_argument('--no-rx', action='store_true', help='Disable incoming data printing')
     args = ap.parse_args()
 
     port = args.port or choose_port()
@@ -93,67 +90,17 @@ def main():
         print(f"Failed to open {port}: {e}")
         return 1
 
-    print(f"Opened {port} @ {args.baud} baud. Type /exit to quit.")
-    print("Type /raw <hex bytes> to send raw bytes (e.g. /raw 01 02 0A FF).")
-    if not args.no_newline:
-        print("Each line you type is sent with a trailing newline.")
-
-    rx_thread = None
-    if not args.no_rx:
-        rx_thread = threading.Thread(target=rx_thread_fn, args=(ser,), daemon=True)
-        rx_thread.start()
-
-    try:
-        while True:
-            line = input('> ')
-            if line.strip().lower() in ('/exit', '/quit', 'exit', 'quit'):
-                break
-            # Raw hex byte sending command
-            if line.startswith('/raw') or line.startswith('/hex'):
-                parts = line.split(None, 1)
-                if len(parts) == 1:
-                    print("No hex bytes provided.")
-                    continue
-                spec = parts[1].strip().replace(',', ' ')
-                tokens = spec.split()
-                raw = bytearray()
-                error = False
-                for tok in tokens:
-                    if tok.lower().startswith('0x'):
-                        tok = tok[2:]
-                    # Allow concatenated hex without spaces as one token
-                    if all(c in hexdigits for c in tok):
-                        if len(tok) % 2 == 1:
-                            tok = '0' + tok  # pad leading zero if odd length
-                        for i in range(0, len(tok), 2):
-                            raw.append(int(tok[i:i+2], 16))
-                    else:
-                        print(f"Invalid hex token: {tok}")
-                        error = True
-                        break
-                if error:
-                    continue
-                payload = bytes(raw)
-            else:
-                payload = line.encode('utf-8')
-                if not args.no_newline:
-                    payload += b'\r\n'
-            try:
-                ser.write(payload)
-                ser.flush()
-                if args.echo:
-                    print(f"Sent {len(payload)} bytes")
-            except serial.SerialTimeoutException:
-                print("Write timeout.")
-            except serial.SerialException as e:
-                print(f"Serial error: {e}")
-                break
-    except KeyboardInterrupt:
-        print("\nInterrupted.")
-    finally:
-        ser.close()
-        print("Closed.")
-    return 0
+    ser.write("S\r\n".encode())
+    ser.write("MDx2x\r\n".encode())
+    while True:
+        ser.write("F0x1x\r\n".encode())
+        ser.flush()
+        ser.write("FDAx9\r\n".encode())
+        ser.flush()
+        time.sleep(0.04)
+        ser.write("F0x0x\r\n".encode())
+        ser.flush()
+        time.sleep(0.04)
 
 
 if __name__ == '__main__':

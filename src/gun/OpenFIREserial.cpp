@@ -40,6 +40,7 @@ void OF_Serial::SerialProcessing() {
             // TODO: handle the other Start line bits? this assume equiv of `S6`
             else {
                 serialMode = true;
+                serialSolenoid = true;
                 OF_FFB::FFBShutdown();
 
     #ifdef USES_SOLENOID
@@ -240,18 +241,24 @@ void OF_Serial::SerialProcessing() {
                     switch (Serial.read()) {
                         // "auto"
                         case '1':
+                            serialSolenoid = false;
                             OF_FFB::burstFireActive = true;
                             OF_Prefs::toggles[OF_Const::autofire] = false;
                             break;
                         // "always on"
                         case '2':
+                            serialSolenoid = false;
                             OF_Prefs::toggles[OF_Const::autofire] = true;
                             OF_FFB::burstFireActive = false;
                             break;
                         // disabled
                         case '0':
+                            serialSolenoid = false;
                             OF_Prefs::toggles[OF_Const::autofire] = false;
                             OF_FFB::burstFireActive = false;
+                            break;
+                        case '3':
+                            serialSolenoid = true;
                             break;
                     }
                     break;
@@ -774,7 +781,7 @@ void OF_Serial::SerialHandling() {
     // we do need to calculate ourselves. The display (if enabled) is handled in the normal Core 0 gunmode run method.
 
     #ifdef USES_SOLENOID
-    if (OF_Prefs::toggles[OF_Const::solenoid]) {
+    if (OF_Prefs::toggles[OF_Const::solenoid] && serialSolenoid) {
         // Solenoid "on" command
         if (serialQueue[SerialQueue_Solenoid]) {
             if (digitalRead(OF_Prefs::pins[OF_Const::solenoidPin])) {
@@ -831,11 +838,10 @@ void OF_Serial::SerialHandling() {
                 }
             }
             // Solenoid "off" command
-        } else
+        } else {
             digitalWrite(OF_Prefs::pins[OF_Const::solenoidPin], LOW);
-        // solenoid toggle not allowed, just force it off.
-    } else
-        digitalWrite(OF_Prefs::pins[OF_Const::solenoidPin], LOW);
+        }
+    }
     #endif  // USES_SOLENOID
 
     #ifdef USES_RUMBLE

@@ -1350,7 +1350,8 @@ void TriggerFire() {
                 }
         }
 
-        if (!OF_Serial::serialMode && !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Start) &&
+        if ((!OF_Serial::serialMode || !OF_Serial::serialSolenoid) &&
+            !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Start) &&
             !bitRead(FW_Common::buttons.debounced, FW_Const::BtnIdx_Select)) {
             OF_FFB::FFBOnScreen();
         }
@@ -1378,7 +1379,7 @@ void TriggerFire() {
             FW_Common::triggerPressedOffscreen = true;
         }
 
-        if (!OF_Serial::serialMode)
+        if (!OF_Serial::serialMode || !OF_Serial::serialSolenoid)
             OF_FFB::FFBOffScreen();
     }
     OF_FFB::triggerHeld = true;
@@ -1423,7 +1424,7 @@ void TriggerNotFire() {
 
     OF_FFB::triggerHeld = false;
 
-    if (!OF_Serial::serialMode)
+    if (!OF_Serial::serialMode || !OF_Serial::serialSolenoid)
         OF_FFB::FFBRelease();
 }
 

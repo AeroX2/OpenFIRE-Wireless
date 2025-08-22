@@ -53,10 +53,11 @@ void OF_FFB::FFBOnScreen() {
                 currentMillis = millis();
                 if (currentMillis - previousMillisSol >= OF_Prefs::settings[OF_Const::solenoidOnLength])
                     digitalWrite(OF_Prefs::pins[OF_Const::solenoidPin], LOW);
-            } else if (millis() - previousMillisSol >=
-                       OF_Prefs::settings[OF_Const::solenoidHoldLength]) {  // We're waiting on the extended wait before
-                                                                            // repeating in single shot mode.
-                SolenoidActivation(0);                                      // Process it now.
+            } else if (OF_Prefs::settings[OF_Const::solenoidHoldLength] != 0 &&
+                       millis() - previousMillisSol >=
+                           OF_Prefs::settings[OF_Const::solenoidHoldLength]) {  // We're waiting on the extended wait
+                                                                                // before repeating in single shot mode.
+                SolenoidActivation(0);                                          // Process it now.
                 solenoidFirstShot =
                     false;  // We're gonna turn this off so we don't have to pass through this check anymore.
             }
@@ -273,20 +274,16 @@ void OF_FFB::BurstFire() {
             burstFireCount++;  // Increment the counter.
         }
         if (!digitalRead(OF_Prefs::pins[OF_Const::solenoidPin])) {  // Now, is the solenoid NOT on right now?
-            SolenoidActivation(OF_Prefs::settings[OF_Const::solenoidOffLength] << autofireDoubleLengthWait
-                                   ? 1
-                                   : 0);          // Hold it off a bit longer,
-        } else {                                  // or if it IS on,
+            SolenoidActivation(OF_Prefs::settings[OF_Const::solenoidOffLength]);  // Hold it off a bit longer,
+        } else {                                                                  // or if it IS on,
             burstFireCountLast = burstFireCount;  // sync the counters since we completed one bullet cycle,
             SolenoidActivation(
                 OF_Prefs::settings[OF_Const::solenoidOnLength]);  // And start trying to activate the dingus.
         }
-#endif  // USES_SOLENOID
-        return;
+#endif                        // USES_SOLENOID
     } else {                  // If we're at three bullets fired,
         burstFiring = false;  // Disable the currently firing tag,
         burstFireCount = 0;   // And set the count off.
-        return;               // Let's go back.
     }
 }
 

@@ -111,6 +111,13 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RS
     #endif  // USE_LOVYAN_GFX
 #endif      // USES_DISPLAY
 
+bool enablePedal = false;
+bool lastButtonState = HIGH;  // Button is pulled up, so HIGH when not pressed
+bool buttonState = HIGH;      // Current debounced state
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;  // 50ms debounce delay
+uint8_t buffer[RX_FRAME_CAP];
+
 // Function to handle all packet types from a serial connection
 void handlePacketData(ESP_NOW_Serial_Class &serial) {
     uint8_t packetType = serial.read();
@@ -162,8 +169,30 @@ void handlePacketData(ESP_NOW_Serial_Class &serial) {
     }
 }
 
+void redrawDisplay() {
+    MacAddress macAddress = WiFi.macAddress();
+
+    tft.fillScreen(BLACK);
+    tft.drawBitmap(40, 0, customSplashBanner, CUSTSPLASHBANN_WIDTH, CUSTSPLASHBANN_HEIGHT, BLUE);
+    tft.setTextSize(1);
+    tft.setCursor(0, 26);
+    tft.setTextColor(RED);
+    tft.println(macAddress.toString());
+    tft.setTextColor(RED);
+    tft.setCursor(0, 40);
+    tft.printf("Player: %d", PLAYER_NUMBER);
+    tft.setCursor(0, 50);
+    tft.setTextColor(GRAY);
+    tft.printf("Channel: %d", ESPNOW_WIFI_CHANNEL);
+    tft.setCursor(0, 60);
+    tft.setTextColor(GRAY);
+    tft.printf("Pedal: %s", enablePedal ? "enabled" : "disabled");
+}
+
 // The main show!
 void setup() {
+    pinMode(0, INPUT_PULLUP);  // Button to toggle pedal enable/disable
+
 #ifdef USES_DISPLAY
     #ifdef USE_LOVYAN_GFX
     tft.init();
@@ -208,60 +237,76 @@ void setup() {
     Serial.setTxTimeoutMs(0);
     // ====== end USB connection ==========================================================================
 
-    MacAddress macAddress = WiFi.macAddress();
 #ifdef USES_DISPLAY
-    tft.fillScreen(BLACK);
-    tft.drawBitmap(40, 0, customSplashBanner, CUSTSPLASHBANN_WIDTH, CUSTSPLASHBANN_HEIGHT, BLUE);
-    tft.setTextSize(1);
-    tft.setCursor(0, 26);
-    tft.setTextColor(RED);
-    tft.println(macAddress.toString());
-    tft.setTextSize(2);
-    tft.setTextColor(RED);
-    tft.setCursor(0, 40);
-    tft.printf("Player: %d", PLAYER_NUMBER);
-    tft.setTextSize(2);
-    tft.setCursor(0, 60);
-    tft.setTextColor(GRAY);
-    tft.printf("Channel: %d", ESPNOW_WIFI_CHANNEL);
-
+    redrawDisplay();
 #endif  // USES_DISPLAY
 }
 
-uint8_t buffer[RX_FRAME_CAP];
 void loop() {
+    // Read button with proper debouncing
+    bool reading = digitalRead(0);
+
+    // If the switch changed, due to noise or pressing:
+    if (reading != lastButtonState) {
+        // reset the debouncing timer
+        lastDebounceTime = millis();
+    }
+
+    if ((millis() - lastDebounceTime) > debounceDelay) {
+        // whatever the reading is at, it's been there for longer than the debounce
+        // delay, so take it as the actual current state:
+
+        // if the button state has changed:
+        if (reading != buttonState) {
+            buttonState = reading;
+
+            // only toggle if the new button state is LOW (pressed)
+            if (buttonState == LOW) {
+                enablePedal = !enablePedal;
+                Serial.printf("Button pressed! Pedal now: %s\n", enablePedal ? "enabled" : "disabled");
+#ifdef USES_DISPLAY
+                redrawDisplay();
+#endif
+            }
+        }
+    }
+
+    // save the reading. Next time through the loop, it'll be the lastButtonState:
+    lastButtonState = reading;
+
     // Read from gun
-    while (NowSerialGun.available()) {
+    if (NowSerialGun.available()) {
         handlePacketData(NowSerialGun);
     }
 
     // Read from pedal
-    while (NowSerialPedal.available()) {
+    if (enablePedal && NowSerialPedal.available()) {
         handlePacketData(NowSerialPedal);
     }
 
     // Handle USB serial to gun & pedal communication (forward host bytes over ESP-NOW framed as PACKET_SERIAL)
-    while (Serial.available()) {
+    if (Serial.available()) {
         size_t avail = Serial.available();
-        if (!avail)
-            break;
-        if (avail > RX_FRAME_CAP)
-            avail = RX_FRAME_CAP;
-        size_t n = Serial.readBytes(buffer, avail);
-        if (n == 0)
-            break;  // nothing actually read; avoid tight loop
+        if (avail) {
+            if (avail > RX_FRAME_CAP)
+                avail = RX_FRAME_CAP;
+            size_t n = Serial.readBytes(buffer, avail);
+            if (n != 0) {
+                auto sendFramed = [&](ESP_NOW_Serial_Class &dest) {
+                    if (!dest.availableForWrite())
+                        return;  // skip if can't write now
+                    dest.write(PACKET_SERIAL);
+                    dest.write((uint8_t)n);
+                    dest.write(buffer, n);
+                    dest.flush();
+                };
 
-        auto sendFramed = [&](ESP_NOW_Serial_Class &dest) {
-            if (!dest.availableForWrite())
-                return;  // skip if can't write now
-            dest.write(PACKET_SERIAL);
-            dest.write((uint8_t)n);
-            dest.write(buffer, n);
-            dest.flush();
-        };
-
-        sendFramed(NowSerialGun);
-        sendFramed(NowSerialPedal);
+                sendFramed(NowSerialGun);
+                if (enablePedal) {
+                    sendFramed(NowSerialPedal);
+                }
+            }
+        }
     }
 
     delay(1);
